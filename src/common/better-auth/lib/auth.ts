@@ -7,10 +7,9 @@ const prisma = new PrismaClient();
 
 const isProduction = process.env.NODE_ENV === 'production';
 
-console.log(process.env.NODE_ENV);
-
 export const auth = betterAuth({
-  trustedOrigins: ['http://localhost:5173', 'https://rezsaz.ir'],
+  // TODO: add production domain
+  trustedOrigins: ['http://localhost:5173'],
   database: prismaAdapter(prisma, {
     provider: 'postgresql',
   }),
@@ -23,7 +22,6 @@ export const auth = betterAuth({
     },
     crossSubDomainCookies: {
       enabled: isProduction,
-      domain: isProduction ? '.rezsaz.ir' : undefined,
     },
     useSecureCookies: isProduction,
     defaultCookieAttributes: {
@@ -54,60 +52,7 @@ export const auth = betterAuth({
     enabled: true,
     autoSignIn: true,
   },
-  databaseHooks: {
-    session: {
-      create: {
-        after: async (session) => {
-          // Get the user data
-          const user = await prisma.user.findUnique({
-            where: { id: session.userId },
-          });
-
-          if (!user) return;
-
-          // Check if user already has organizations
-          const userMemberships = await prisma.member.findMany({
-            where: { userId: user.id },
-          });
-
-          // If user has no organizations, create one
-          if (userMemberships.length === 0) {
-            // Create a default organization for the user
-            const newOrg = await prisma.organization.create({
-              data: {
-                name: `${user.name || user.email.split('@')[0]}'s Workspace`,
-                slug: `${user.email.split('@')[0]}-${Date.now()}`,
-                members: {
-                  create: {
-                    userId: user.id,
-                    role: 'owner',
-                  },
-                },
-              },
-            });
-
-            // Set this new organization as active
-            await prisma.session.update({
-              where: { id: session.id },
-              data: { activeOrganizationId: newOrg.id },
-            });
-
-            console.log(
-              `Created organization "${newOrg.name}" for user ${user.email}`,
-            );
-          }
-
-          // if user has one org active default organization
-          if (userMemberships.length === 1) {
-            await prisma.session.update({
-              where: { id: session.id },
-              data: { activeOrganizationId: userMemberships[0].organizationId },
-            });
-          }
-        },
-      },
-    },
-  },
+  databaseHooks: {},
   plugins: [
     openAPI(),
     organization({
