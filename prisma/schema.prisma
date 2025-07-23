@@ -83,6 +83,9 @@ model Organization {
   name      String
   slug      String   @unique
   logo      String?
+  wooCommerceUrl String?
+  consumerKey String?
+  consumerSecret String?
   metadata  Json?
   createdAt DateTime @default(now())
   
@@ -94,6 +97,7 @@ model Organization {
   invitations Invitation[]
   teams       Team[]
   sessions    Session[]
+  wooCommerceWebhooks  WooCommerceWebhook[]
 }
 
 model Member {
@@ -141,4 +145,29 @@ model Team {
 enum Role {
   OWNER
   EMPLOYEE
+}
+
+model WooCommerceWebhook {
+  id                    String   @id @default(uuid()) @db.Uuid
+  organizationId        String   @db.Uuid
+  wooCommerceWebhookId  Int      @unique
+  name                  String
+  status                String
+  topic                 String
+  resource              String
+  event                 String
+  hooks                 Json?
+  deliveryUrl           String
+  secret                String
+  dateCreated           DateTime
+  dateModified          DateTime?
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  @@index([organizationId])
+  @@index([topic])
+  @@index([status])
 }

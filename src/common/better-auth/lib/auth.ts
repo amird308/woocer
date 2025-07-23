@@ -1,7 +1,8 @@
 import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
-import { organization, bearer, openAPI } from 'better-auth/plugins';
+import { organization, openAPI } from 'better-auth/plugins';
 import { PrismaClient } from '@prisma/client';
+import { ac, employee, owner } from './permissions';
 
 const prisma = new PrismaClient();
 
@@ -52,15 +53,48 @@ export const auth = betterAuth({
     enabled: true,
     autoSignIn: true,
   },
+
   databaseHooks: {},
   plugins: [
     openAPI(),
     organization({
+      ac,
+      roles: {
+        owner,
+        employee,
+      },
       // Organization plugin configuration
       allowUserToCreateOrganization: true,
       organizationLimit: 5,
       creatorRole: 'owner',
       membershipLimit: 100,
+      organizationCreation: {
+        afterCreate: async (data) => {
+          try {
+            // Import WooCommerceService dynamically to avoid circular dependency
+            const { WooCommerceService } = await import(
+              '../../../modules/woocommerce/woocommerce.service'
+            );
+            const { PrismaService } = await import(
+              '../../prisma/prisma.service'
+            );
+
+            const prismaService = new PrismaService();
+            const wooCommerceService = new WooCommerceService(prismaService);
+
+            // Setup WooCommerce integration for the new organization
+            await wooCommerceService.handleOrganizationCreated(
+              data.organization.id,
+            );
+          } catch (error) {
+            console.error(
+              'Failed to setup WooCommerce integration for organization:',
+              error,
+            );
+            // Don't throw error to prevent organization creation failure
+          }
+        },
+      },
       sendInvitationEmail: async (data) => {
         //TODO send an email here
         console.log(
@@ -68,7 +102,27 @@ export const auth = betterAuth({
         );
         console.log(`Invite link: /accept-invitation/${data.id}`);
       },
+      schema: {
+        organization: {
+          additionalFields: {
+            consumerKey: {
+              type: 'string',
+              input: true,
+              required: true,
+            },
+            consumerSecret: {
+              type: 'string',
+              input: true,
+              required: true,
+            },
+            wooCommerceUrl: {
+              type: 'string',
+              input: true,
+              required: true,
+            },
+          },
+        },
+      },
     }),
-    bearer(),
   ],
-});
+}) as any;

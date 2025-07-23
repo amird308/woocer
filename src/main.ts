@@ -4,7 +4,6 @@ import { ClassSerializerInterceptor, ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AllExceptionsFilter } from './common/filters/core-exception.filter';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { writeFileSync } from 'fs';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -14,8 +13,8 @@ async function bootstrap() {
   const config = new DocumentBuilder()
     .addBearerAuth()
     .addBasicAuth()
-    .setTitle('rezsaz API')
-    .setDescription('API for rezsaz')
+    .setTitle('woocer API')
+    .setDescription('API for woocer')
     .setVersion('4.0')
     .build();
 
@@ -30,14 +29,6 @@ async function bootstrap() {
   });
   SwaggerModule.setup('api', app, document);
 
-  console.log(process.env.NODE_ENV);
-  if (process.env.NODE_ENV === 'development') {
-    writeFileSync(
-      '../../packages/core-api/open-api.json',
-      JSON.stringify(document, null, 2),
-    );
-  }
-
   const { httpAdapter } = app.get(HttpAdapterHost);
   app.useGlobalPipes(
     new ValidationPipe({
@@ -50,7 +41,7 @@ async function bootstrap() {
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
   app.enableCors({
     origin: [
-      'https://rezsaz.ir',
+      'https://woocer.com',
       'http://localhost:5173',
       'http://localhost:3000',
     ],
