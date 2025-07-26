@@ -10,7 +10,7 @@ export function generateSlug(text: string, suffix?: string): string {
     .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
     .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
 
-  return suffix ? `${baseSlug}-${suffix}` : baseSlug;
+  return suffix ? `${baseSlug}-${suffix}-${Date.now()}` : baseSlug;
 }
 
 /**

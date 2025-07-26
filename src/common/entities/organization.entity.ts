@@ -5,17 +5,7 @@ export interface OrganizationEntity {
   logo?: string;
   metadata?: any;
   createdAt: Date;
-  
-  // Company details
-  companyName?: string;
-  companyAddress?: string;
-  companyPhone?: string;
-  companyEmail?: string;
-  companyWebsite?: string;
-  companyDescription?: string;
-  companyLogoFileKey?: string;
-  companyBannerFileKey?: string;
-  companyTheme?: string;
-  
-  domainProfile?: string;
+  consumerKey: string;
+  consumerSecret: string;
+  wooCommerceUrl: string;
 }

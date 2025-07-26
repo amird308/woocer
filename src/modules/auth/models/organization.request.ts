@@ -1,0 +1,84 @@
+import { IsString, IsOptional, IsUrl, IsNotEmpty } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+
+export class EncryptedData {
+  @ApiProperty({
+    description: 'Encrypted data',
+    example: 'encrypted_data',
+  })
+  @IsString()
+  @IsNotEmpty()
+  encryptedData: string;
+
+  @ApiProperty({
+    description: 'Encrypted symmetric key',
+    example: 'encrypted_symmetric_key',
+  })
+  @IsString()
+  @IsNotEmpty()
+  encryptedSymmetricKey: string;
+}
+
+export class CreateOrganizationRequestDto {
+  @ApiProperty({
+    description: 'Organization name',
+    example: 'My Store',
+  })
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @ApiPropertyOptional({
+    description: 'Organization slug (auto-generated if not provided)',
+    example: 'my-store',
+  })
+  @IsString()
+  @IsOptional()
+  slug?: string;
+
+  @ApiPropertyOptional({
+    description: 'Organization logo URL',
+    example: 'https://example.com/logo.png',
+  })
+  @IsUrl()
+  @IsOptional()
+  logo?: string;
+
+  @ApiProperty({
+    description: 'WooCommerce consumer key',
+    example: {
+      encryptedData: 'encrypted_data',
+      encryptedSymmetricKey: 'encrypted_symmetric_key',
+    },
+  })
+  @Type(() => EncryptedData)
+  @IsNotEmpty()
+  consumerKey: EncryptedData;
+
+  @ApiProperty({
+    description: 'WooCommerce consumer secret',
+    example: {
+      encryptedData: 'encrypted_data',
+      encryptedSymmetricKey: 'encrypted_symmetric_key',
+    },
+  })
+  @Type(() => EncryptedData)
+  @IsNotEmpty()
+  consumerSecret: EncryptedData;
+
+  @ApiProperty({
+    description: 'WooCommerce store URL',
+    example: 'https://mystore.com',
+  })
+  @IsString()
+  @IsNotEmpty()
+  wooCommerceUrl: string;
+
+  @ApiPropertyOptional({
+    description: 'Whether to keep current active organization',
+    example: false,
+  })
+  @IsOptional()
+  keepCurrentActiveOrganization?: boolean;
+}
