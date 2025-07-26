@@ -3,6 +3,7 @@ import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { organization, openAPI } from 'better-auth/plugins';
 import { PrismaClient } from '@prisma/client';
 import { ac, employee, owner } from './permissions';
+import { OrganizationEncryptionManager } from '../../utilities/encryption.util';
 
 const prisma = new PrismaClient();
 
@@ -66,7 +67,7 @@ export const auth = betterAuth({
       // Organization plugin configuration
       allowUserToCreateOrganization: true,
       organizationLimit: 5,
-      creatorRole: 'owner',
+      creatorRole: 'OWNER',
       membershipLimit: 100,
       organizationCreation: {
         afterCreate: async (data) => {
@@ -105,6 +106,11 @@ export const auth = betterAuth({
       schema: {
         organization: {
           additionalFields: {
+            slug: {
+              type: 'string',
+              input: true,
+              required: false,
+            },
             consumerKey: {
               type: 'string',
               input: true,
