@@ -1,7 +1,8 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import WooCommerceRestApi from '@woocommerce/woocommerce-rest-api';
-import { createHash, createHmac } from 'crypto';
+import { createHash, createHmac } from 'node:crypto';
+import { OrganizationEncryptionManager } from '../../common/utilities/encryption.util';
 
 export interface WooCommerceConfig {
   organizationId: string;
@@ -26,6 +27,7 @@ export class WooCommerceService {
   }
 
   async setupWebhooks(config: WooCommerceConfig): Promise<void> {
+    console.log('Setting up webhooks for organization:', config);
     const api = this.createApiClient(config);
     const webhookSecret = this.generateWebhookSecret();
 
@@ -57,10 +59,11 @@ export class WooCommerceService {
       },
     ];
 
+    console.log('Webhooks to create:', api);
     try {
       for (const webhookData of webhooksToCreate) {
         const response = await api.post('webhooks', webhookData);
-
+        console.log('Webhook created:', response.data);
         await this.prisma.wooCommerceWebhook.create({
           data: {
             organizationId: config.organizationId,
@@ -89,9 +92,13 @@ export class WooCommerceService {
     }
   }
 
-  async processOrder(organizationId: string, orderData: any): Promise<void> {}
+  async processOrder(organizationId: string, orderData: any): Promise<void> {
+    console.log('Processing order:', orderData);
+  }
 
-  async processProduct(productionId: string, productData: any): Promise<void> {}
+  async processProduct(productionId: string, productData: any): Promise<void> {
+    console.log('Processing product:', productData);
+  }
 
   validateWebhookSignature(
     payload: string,
@@ -132,12 +139,27 @@ export class WooCommerceService {
       return null;
     }
 
-    return {
-      organizationId: organization.id,
-      wooCommerceUrl: organization.wooCommerceUrl,
-      consumerKey: organization.consumerKey,
-      consumerSecret: organization.consumerSecret,
-    };
+    try {
+      // Decrypt the stored encrypted organization data
+      const decryptedData =
+        OrganizationEncryptionManager.decryptStoredOrganizationData({
+          consumerKey: organization.consumerKey,
+          consumerSecret: organization.consumerSecret,
+        });
+
+      return {
+        organizationId: organization.id,
+        wooCommerceUrl: organization.wooCommerceUrl,
+        consumerKey: decryptedData.consumerKey,
+        consumerSecret: decryptedData.consumerSecret,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Failed to decrypt organization ${organizationId} WooCommerce config:`,
+        error,
+      );
+      return null;
+    }
   }
 
   async handleOrganizationCreated(organizationId: string): Promise<void> {
