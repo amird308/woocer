@@ -3,7 +3,7 @@ import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { organization, openAPI } from 'better-auth/plugins';
 import { PrismaClient } from '@prisma/client';
 import { ac, employee, owner } from './permissions';
-import { OrganizationEncryptionManager } from '../../utilities/encryption.util';
+// import { OrganizationEncryptionManager } from '../../utilities/encryption.util';
 
 const prisma = new PrismaClient();
 
@@ -45,10 +45,10 @@ export const auth = betterAuth({
     throw: true,
   },
   socialProviders: {
-    google: {
-      clientId: process.env.GOOGLE_CLIENT_ID as string,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-    },
+    // google: {
+    //   clientId: process.env.GOOGLE_CLIENT_ID as string,
+    //   clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+    // },
   },
   emailAndPassword: {
     enabled: true,
