@@ -9,7 +9,7 @@
  * npx tsx scripts/generate-encryption-keys.ts
  */
 
-import { runKeyGeneration } from '../src/common/utilities/key-generator.util';
+import { runKeyGeneration } from '../common/utilities/key-generator.util';
 
 console.log('🔐 Organization Encryption Key Generator');
 console.log('=====================================\n');

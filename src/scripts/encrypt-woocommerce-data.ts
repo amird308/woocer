@@ -1,6 +1,6 @@
 #!/usr/bin/env ts-node
 
-import { AsymmetricEncryption } from '../src/common/utilities/encryption.util';
+import { AsymmetricEncryption } from '../common/utilities/encryption.util';
 
 interface WooCommerceCredentials {
   consumerKey: string;
