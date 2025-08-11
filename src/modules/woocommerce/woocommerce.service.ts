@@ -1,8 +1,10 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { NotificationsService } from '@common/notifications/notifications.service';
 import WooCommerceRestApi from '@woocommerce/woocommerce-rest-api';
 import { createHash, createHmac } from 'node:crypto';
 import { OrganizationEncryptionManager } from '../../common/utilities/encryption.util';
+import { RawBodyRequest, Request } from '@nestjs/common';
 
 export interface WooCommerceConfig {
   organizationId: string;
@@ -15,7 +17,10 @@ export interface WooCommerceConfig {
 export class WooCommerceService {
   private readonly logger = new Logger(WooCommerceService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   private createApiClient(config: WooCommerceConfig) {
     return new WooCommerceRestApi({
@@ -92,12 +97,76 @@ export class WooCommerceService {
     }
   }
 
-  async processOrder(organizationId: string, orderData: any): Promise<void> {
-    console.log('Processing order:', orderData);
+  async processOrder(organizationId: string, orderData: any, webhookTopic?: string): Promise<void> {
+    this.logger.log(`Processing order ${orderData.id} for organization ${organizationId}`);
+    
+    try {
+      // Use webhook topic if provided, otherwise determine from order status
+      const topic = webhookTopic || this.getOrderNotificationTopic(orderData);
+      
+      if (topic) {
+        // Send notification to organization members
+        const notificationSent = await this.notificationsService.sendWooCommerceNotification(
+          organizationId,
+          topic,
+          orderData,
+          {
+            data: {
+              type: 'order_update',
+              orderId: orderData.id,
+              orderNumber: orderData.number,
+              status: orderData.status,
+              total: orderData.total,
+              currency: orderData.currency,
+            },
+          },
+        );
+        
+        if (notificationSent) {
+          this.logger.log(`Sent ${topic} notification for order ${orderData.id}`);
+        } else {
+          this.logger.warn(`Failed to send ${topic} notification for order ${orderData.id}`);
+        }
+      }
+    } catch (error) {
+      this.logger.error(`Failed to process order ${orderData.id}:`, error);
+    }
   }
 
-  async processProduct(productionId: string, productData: any): Promise<void> {
-    console.log('Processing product:', productData);
+  async processProduct(organizationId: string, productData: any, webhookTopic?: string): Promise<void> {
+    this.logger.log(`Processing product ${productData.id} for organization ${organizationId}`);
+    
+    try {
+      // Use webhook topic if provided, otherwise determine from product data
+      const topic = webhookTopic || this.getProductNotificationTopic(productData);
+      
+      if (topic) {
+        // Send notification to organization members
+        const notificationSent = await this.notificationsService.sendWooCommerceNotification(
+          organizationId,
+          topic,
+          productData,
+          {
+            data: {
+              type: 'product_update',
+              productId: productData.id,
+              productName: productData.name,
+              productSku: productData.sku,
+              productPrice: productData.price,
+              productStatus: productData.status,
+            },
+          },
+        );
+        
+        if (notificationSent) {
+          this.logger.log(`Sent ${topic} notification for product ${productData.id}`);
+        } else {
+          this.logger.warn(`Failed to send ${topic} notification for product ${productData.id}`);
+        }
+      }
+    } catch (error) {
+      this.logger.error(`Failed to process product ${productData.id}:`, error);
+    }
   }
 
   validateWebhookSignature(
@@ -116,6 +185,53 @@ export class WooCommerceService {
     return createHash('sha256')
       .update(Date.now().toString() + Math.random().toString())
       .digest('hex');
+  }
+
+  /**
+   * Determine the appropriate notification topic for an order based on its status
+   */
+  private getOrderNotificationTopic(orderData: any): string | null {
+    const status = orderData.status?.toLowerCase();
+    
+    switch (status) {
+      case 'completed':
+        return 'order.completed';
+      case 'processing':
+        return 'order.processing';
+      case 'on-hold':
+        return 'order.on-hold';
+      case 'cancelled':
+        return 'order.cancelled';
+      case 'refunded':
+        return 'order.refunded';
+      case 'failed':
+        return 'order.failed';
+      case 'pending':
+        return 'order.created';
+      default:
+        // For any other status changes, use the generic updated topic
+        return 'order.updated';
+    }
+  }
+
+  /**
+   * Determine the appropriate notification topic for a product
+   */
+  private getProductNotificationTopic(productData: any): string | null {
+    // Since we don't have explicit action context, we'll use the generic topics
+    // This could be enhanced based on webhook context or additional data
+    if (productData.date_created && productData.date_modified) {
+      const created = new Date(productData.date_created);
+      const modified = new Date(productData.date_modified);
+      
+      // If created and modified are very close (within 1 minute), it's likely a new product
+      if (Math.abs(modified.getTime() - created.getTime()) < 60000) {
+        return 'product.created';
+      }
+    }
+    
+    // Default to updated for existing products
+    return 'product.updated';
   }
 
   async getOrganizationConfig(
@@ -159,6 +275,55 @@ export class WooCommerceService {
         error,
       );
       return null;
+    }
+  }
+
+  async handleWebhook(
+    req: RawBodyRequest<Request>,
+    signature: string,
+    webhookId: string,
+    topic: string,
+  ): Promise<{ success: boolean }> {
+    try {
+      const payload = req.rawBody?.toString('utf8') || '';
+      const data = JSON.parse(payload);
+
+      // Find webhook configuration to get secret and organization
+      const webhook = await this.prisma.wooCommerceWebhook.findUnique({
+        where: { wooCommerceWebhookId: parseInt(webhookId) },
+        include: { organization: true },
+      });
+
+      if (!webhook) {
+        this.logger.warn(`Webhook ${webhookId} not found`);
+        throw new BadRequestException('Webhook not found');
+      }
+
+      // Validate webhook signature
+      if (!this.validateWebhookSignature(payload, signature, webhook.secret)) {
+        this.logger.warn(`Invalid signature for webhook ${webhookId}`);
+        throw new BadRequestException('Invalid webhook signature');
+      }
+
+      // Process the webhook based on topic
+      switch (topic) {
+        case 'order.created':
+        case 'order.updated':
+          await this.processOrder(webhook.organizationId, data, topic);
+          break;
+        case 'product.created':
+        case 'product.updated':
+          await this.processProduct(webhook.organizationId, data, topic);
+          break;
+        default:
+          this.logger.warn(`Unknown webhook topic: ${topic}`);
+      }
+
+      this.logger.log(`Processed webhook ${webhookId} for topic ${topic}`);
+      return { success: true };
+    } catch (error) {
+      this.logger.error(`Failed to process webhook ${webhookId}:`, error);
+      throw new BadRequestException('Failed to process webhook');
     }
   }
 
