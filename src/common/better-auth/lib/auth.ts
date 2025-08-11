@@ -1,8 +1,10 @@
 import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
-import { organization, openAPI } from 'better-auth/plugins';
+import { organization, openAPI, emailOTP } from 'better-auth/plugins';
 import { PrismaClient } from '@prisma/client';
 import { ac, employee, owner } from './permissions';
+import { EmailService } from '../../services/email.service';
+import { ConfigService } from '@nestjs/config';
 // import { OrganizationEncryptionManager } from '../../utilities/encryption.util';
 
 const prisma = new PrismaClient();
@@ -58,6 +60,20 @@ export const auth = betterAuth({
   databaseHooks: {},
   plugins: [
     openAPI(),
+    emailOTP({
+      async sendVerificationOTP({ email, otp, type }) {
+        try {
+          if(type === "email-verification" || type === "sign-in") {
+            const configService = new ConfigService();
+            const emailService = new EmailService(configService);
+            await emailService.sendOTPEmail(email, otp, type);
+          }
+        } catch (error) {
+          console.error('Failed to send OTP email:', error);
+          throw error;
+        }
+      },
+    }),
     organization({
       ac,
       roles: {
@@ -72,16 +88,24 @@ export const auth = betterAuth({
       organizationCreation: {
         afterCreate: async (data) => {
           try {
-            // Import WooCommerceService dynamically to avoid circular dependency
+            // Import services dynamically to avoid circular dependency
             const { WooCommerceService } = await import(
               '../../../modules/woocommerce/woocommerce.service'
             );
             const { PrismaService } = await import(
               '../../prisma/prisma.service'
             );
+            const { NotificationsService } = await import(
+              '../../notifications/notifications.service'
+            );
+            const { MessageService } = await import(
+              '../../notifications/message.service'
+            );
 
             const prismaService = new PrismaService();
-            const wooCommerceService = new WooCommerceService(prismaService);
+            const messageService = new MessageService();
+            const notificationsService = new NotificationsService(prismaService, messageService);
+            const wooCommerceService = new WooCommerceService(prismaService, notificationsService);
 
             // Setup WooCommerce integration for the new organization
             await wooCommerceService.handleOrganizationCreated(
@@ -97,11 +121,26 @@ export const auth = betterAuth({
         },
       },
       sendInvitationEmail: async (data) => {
-        //TODO send an email here
-        console.log(
-          `Invitation sent to ${data.email} for organization ${data.organization.name}`,
-        );
-        console.log(`Invite link: /accept-invitation/${data.id}`);
+        try {
+          const configService = new ConfigService();
+          const emailService = new EmailService(configService);
+          const baseUrl = process.env.BETTER_AUTH_URL || process.env.APP_URL || 'http://localhost:3000';
+          const inviteLink = `${baseUrl}/accept-invitation/${data.id}`;
+
+          await emailService.sendInvitationEmail(
+            data.email,
+            data.organization.name,
+            inviteLink,
+            data.inviter?.user.name
+          );
+
+          console.log(
+            `Invitation sent to ${data.email} for organization ${data.organization.name}`,
+          );
+        } catch (error) {
+          console.error('Failed to send invitation email:', error);
+          // Don't throw error to prevent invitation creation failure
+        }
       },
       schema: {
         organization: {
@@ -125,6 +164,21 @@ export const auth = betterAuth({
               type: 'string',
               input: true,
               required: true,
+            },
+          },
+        },
+        user: {
+          additionalFields: {
+            signalId: {
+              type: 'string',
+              input: true,
+              required: false,
+            },
+            language: {
+              type: 'string',
+              input: true,
+              required: false,
+              defaultValue: 'en',
             },
           },
         },

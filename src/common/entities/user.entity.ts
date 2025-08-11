@@ -5,6 +5,8 @@ export interface UserEntity {
   emailVerified: boolean;
   image?: string;
   password?: string;
+  signalId?: string; // OneSignal player ID for push notifications
+  language?: string; // User's preferred language (en, fa, etc.)
   createdAt: Date;
   updatedAt: Date;
 }
