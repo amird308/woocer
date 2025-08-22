@@ -2,6 +2,7 @@ import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthModule } from './modules/auth/auth.module';
 import { WooCommerceModule } from './modules/woocommerce/woocommerce.module';
+import { SubscriptionModule } from './modules/subscription/subscription.module';
 import { NotificationsModule } from './common/notifications/notifications.module';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { RawBodyMiddleware } from './common/middlewares/raw-body.middleware';
@@ -29,6 +30,7 @@ import { BullModule } from '@nestjs/bullmq';
     PrismaModule,
     AuthModule,
     WooCommerceModule,
+    SubscriptionModule,
     NotificationsModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],

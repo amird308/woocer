@@ -30,6 +30,9 @@ model User {
   accounts   Account[]
   members    Member[]
   invitations Invitation[] @relation("inviter")
+  subscriptions Subscription[]
+  creditPurchases CreditPurchase[]
+  creditTransactions CreditTransaction[]
 }
 
 // Better Auth Session Model
@@ -100,6 +103,9 @@ model Organization {
   teams       Team[]
   sessions    Session[]
   wooCommerceWebhooks  WooCommerceWebhook[]
+  subscriptions Subscription[]
+  creditPurchases CreditPurchase[]
+  creditTransactions CreditTransaction[]
 }
 
 model Member {
@@ -172,4 +178,129 @@ model WooCommerceWebhook {
   @@index([organizationId])
   @@index([topic])
   @@index([status])
+}
+
+// Subscription Management Models
+model Subscription {
+  id                    String              @id @default(uuid()) @db.Uuid
+  userId                String              @db.Uuid
+  organizationId        String              @db.Uuid
+  revenueCatCustomerId  String
+  plan                  SubscriptionPlan
+  status                SubscriptionStatus
+  currentPeriodStart    DateTime
+  currentPeriodEnd      DateTime
+  monthlyCredits        Int                 @default(0)
+  usedMonthlyCredits    Int                 @default(0)
+  purchasedCredits      Int                 @default(0)
+  isActive              Boolean             @default(true)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  creditPurchases   CreditPurchase[]
+  creditTransactions CreditTransaction[]
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@index([status])
+  @@index([plan])
+}
+
+model CreditPackage {
+  id                    String   @id @default(uuid()) @db.Uuid
+  name                  String
+  credits               Int
+  price                 Int      // Price in cents
+  currency              String   @default("USD")
+  revenueCatProductId   String   @unique
+  isActive              Boolean  @default(true)
+  sortOrder             Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  creditPurchases CreditPurchase[]
+
+  @@index([isActive])
+  @@index([sortOrder])
+}
+
+model CreditPurchase {
+  id                      String         @id @default(uuid()) @db.Uuid
+  userId                  String         @db.Uuid
+  organizationId          String         @db.Uuid
+  subscriptionId          String         @db.Uuid
+  creditPackageId         String         @db.Uuid
+  revenueCatTransactionId String         @unique
+  credits                 Int
+  price                   Int            // Price in cents
+  currency                String         @default("USD")
+  status                  PurchaseStatus
+  purchasedAt             DateTime
+  refundedAt              DateTime?
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscription  Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  creditPackage CreditPackage @relation(fields: [creditPackageId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([purchasedAt])
+}
+
+model CreditTransaction {
+  id              String                @id @default(uuid()) @db.Uuid
+  userId          String                @db.Uuid
+  organizationId  String                @db.Uuid
+  subscriptionId  String?               @db.Uuid
+  type            CreditTransactionType
+  amount          Int                   // Positive for add, negative for consume
+  description     String
+  metadata        Json?
+  createdAt       DateTime              @default(now())
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([subscriptionId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+enum SubscriptionPlan {
+  PRO
+  AI
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  UNPAID
+  PAUSED
+}
+
+enum PurchaseStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum CreditTransactionType {
+  MONTHLY_ALLOCATION
+  PURCHASED
+  CONSUMED
+  REFUNDED
+  EXPIRED
 }
