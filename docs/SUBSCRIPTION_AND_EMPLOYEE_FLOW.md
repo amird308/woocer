@@ -3,10 +3,10 @@
 ## Overview
 
 The WooCommerce Store Management App implements a comprehensive subscription system with two main types:
-1. **Personal Subscriptions** - Individual user subscriptions
-2. **Employee Subscriptions** - Organization-sponsored subscriptions for employees
+1. **Personal Subscriptions** - Individual user subscriptions (self-paid)
+2. **Sponsored Employee Subscriptions** - Individual subscriptions sponsored by organization owners
 
-The system integrates with RevenueCat for payment processing and includes a dual-credit system with monthly and purchased credits.
+The system integrates with RevenueCat for payment processing and includes a dual-credit system with monthly and purchased credits. **Each user has their own individual subscription and credit pool.**
 
 ## System Architecture
 
@@ -21,7 +21,7 @@ graph TB
     subgraph "Backend API"
         AUTH[Auth Service]
         SUB[Subscription Service]
-        EMP[Employee Subscription Service]
+        SPONSOR[Sponsorship Service]
         CREDIT[Credit Purchase Service]
         WEBHOOK[Webhook Service]
     end
@@ -36,23 +36,23 @@ graph TB
     AND --> AUTH
     
     AUTH --> SUB
-    AUTH --> EMP
+    AUTH --> SPONSOR
     AUTH --> CREDIT
     
     RC --> WEBHOOK
     WEBHOOK --> SUB
-    WEBHOOK --> EMP
+    WEBHOOK --> SPONSOR
     WEBHOOK --> CREDIT
     
     SUB --> DB
-    EMP --> DB
+    SPONSOR --> DB
     CREDIT --> DB
     WEBHOOK --> DB
 ```
 
 ## Subscription Types and Plans
 
-### Personal Subscriptions
+### Personal Subscriptions (Self-Paid)
 
 | Plan | Monthly Credits | Price | AI Features | Description |
 |------|----------------|-------|-------------|-------------|
@@ -60,77 +60,34 @@ graph TB
 | PRO | 0 credits | $9.99/month | ❌ | Basic store management, no AI |
 | AI | 100 credits | $19.99/month | ✅ | Full AI features + monthly credits |
 
-### Employee Subscriptions
+### Sponsored Employee Subscriptions
 
-Employee subscriptions are **AI or TRIAL plans only** sponsored by organization owners for their team members.
+Organization owners can sponsor individual subscriptions for their employees:
 
-- **Sponsor**: Organization owner pays for the subscription
-- **Beneficiaries**: Organization employees get access to AI features
-- **Shared Credits**: All employees share the monthly credit pool
-- **Max Employees**: Configurable limit per subscription
+- **Available Plans**: PRO ($9.99/month) or AI ($19.99/month)
+- **Individual Credits**: Each employee gets their own credit pool
+- **Separate Billing**: Each employee subscription is billed separately to the sponsor
+- **Full Independence**: Employees have complete control over their individual credits
 
 ## Credit System
 
 ### Credit Types
 
-1. **Monthly Credits** - Reset every billing period
+1. **Monthly Credits** - Reset every billing period (AI plan only)
 2. **Purchased Credits** - Never expire, can be bought additionally
 
-### Credit Usage Priority
+### Credit Usage Rules
 
-Credits are consumed in this order:
-1. Monthly credits first
-2. Purchased credits second
-
-### Credit Rules
-
+- Each user has their own individual credit pool
 - Only **AI Plan** and **TRIAL** subscribers can use credits
 - **PRO Plan** subscribers have 0 credits and no AI access
-- Credits are shared in employee subscriptions
-- All credit usage is logged for audit trails
+- Credits are **NOT shared** - each subscription is independent
+- All credit usage is logged for individual audit trails
 
-## Complete Flow Diagrams
 
-### 1. User Registration and Trial Flow
+## Flow Diagrams
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Frontend
-    participant API
-    participant DB
-    
-    User->>Frontend: Sign up
-    Frontend->>API: POST /auth/register
-    API->>DB: Create user
-    API->>DB: Auto-create trial subscription
-    API->>Frontend: User + Trial details
-    Frontend->>User: Welcome + 50 trial credits
-```
-
-### 2. Personal Subscription Upgrade Flow
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant Frontend
-    participant API
-    participant RevenueCat
-    participant Webhook
-    participant DB
-    
-    User->>Frontend: Choose paid plan
-    Frontend->>RevenueCat: Purchase subscription
-    RevenueCat->>Webhook: INITIAL_PURCHASE event
-    Webhook->>API: Process webhook
-    API->>DB: Create/update subscription
-    API->>DB: Allocate monthly credits
-    Frontend->>API: GET /subscriptions/current
-    API->>Frontend: Updated subscription details
-    Frontend->>User: Subscription active
-```
-
-### 3. Employee Subscription Creation Flow
+### 1. Employee Subscription Sponsorship Flow 
 
 ```mermaid
 sequenceDiagram
@@ -139,25 +96,30 @@ sequenceDiagram
     participant API
     participant RevenueCat
     participant DB
+    participant Employee
     
     Owner->>Frontend: View organization members
-    Frontend->>API: GET /employee-subscriptions/organizations/{id}/members
-    API->>Frontend: Members list with subscription status
+    Frontend->>API: GET /sponsorships/organizations/{id}/members
+    API->>Frontend: Members list with sponsorship status
     
-    Owner->>Frontend: Select employees + plan
-    Frontend->>RevenueCat: Purchase employee subscription
-    RevenueCat->>API: Webhook notification
+    Owner->>Frontend: Select employees + plans
+    Frontend->>API: POST /sponsorships/bulk/organizations/{id}
+    API->>DB: Create individual subscriptions
+    API->>DB: Create sponsorship records
+    API->>RevenueCat: Setup billing for each subscription
     
-    Owner->>Frontend: Create bulk assignment
-    Frontend->>API: POST /employee-subscriptions/bulk/organizations/{id}
-    API->>DB: Create subscription
-    API->>DB: Assign selected employees
-    API->>DB: Allocate shared credits
-    API->>Frontend: Assignment results
+    RevenueCat->>API: Webhook confirmation
+    API->>DB: Activate sponsorships
+    API->>Frontend: Sponsorship results
     Frontend->>Owner: Success confirmation
+    
+    Note over Employee: Each employee gets their own individual subscription
+    Employee->>Frontend: Access upgraded features
+    Frontend->>API: GET /subscriptions/current
+    API->>Frontend: Individual subscription details
 ```
 
-### 4. Employee Credit Usage Flow
+### 2. Individual Employee Credit Usage Flow 
 
 ```mermaid
 sequenceDiagram
@@ -167,53 +129,34 @@ sequenceDiagram
     participant DB
     
     Employee->>Frontend: Use AI feature
-    Frontend->>API: GET /employee-subscriptions/my-subscription/organizations/{id}
-    API->>Frontend: Available credits
+    Frontend->>API: GET /subscriptions/current
+    API->>DB: Get employee's individual subscription
+    API->>Frontend: Individual available credits
     
     alt Has sufficient credits
-        Frontend->>API: POST /employee-subscriptions/{id}/consume-credits
-        API->>DB: Deduct credits
-        API->>DB: Log transaction
+        Frontend->>API: POST /subscriptions/consume-credits
+        API->>DB: Deduct from individual credit pool
+        API->>DB: Log individual transaction
         API->>Frontend: Credits consumed
         Frontend->>Employee: AI feature result
     else Insufficient credits
-        Frontend->>Employee: Upgrade required
+        Frontend->>Employee: Upgrade required or buy credits
     end
 ```
 
 ## Frontend API Integration
 
-### 1. Authentication Setup
+### 1. Personal Subscription Management (Updated)
 
 ```typescript
-// Initialize with current user context
-const currentUser = await getCurrentUser();
-const activeOrganization = await getActiveOrganization();
-```
-
-### 2. Personal Subscription Management
-
-```typescript
-// Get current subscription status
+// Get current user's individual subscription
 const getPersonalSubscription = async () => {
   const response = await api.get('/subscriptions/current');
   return response.data;
 };
 
-// Create trial subscription
-const startTrial = async () => {
-  const response = await api.post('/subscriptions/trial');
-  return response.data;
-};
-
-// Convert trial to paid
-const upgradeToPaid = async (subscriptionData: CreateSubscriptionRequest) => {
-  const response = await api.post('/subscriptions/trial/convert', subscriptionData);
-  return response.data;
-};
-
-// Consume credits from personal subscription
-const consumePersonalCredits = async (credits: number, description: string) => {
+// Consume credits from individual subscription
+const consumeCredits = async (credits: number, description: string) => {
   const response = await api.post('/subscriptions/consume-credits', {
     credits,
     description,
@@ -221,241 +164,223 @@ const consumePersonalCredits = async (credits: number, description: string) => {
   });
   return response.data;
 };
+
+// Purchase additional credits for individual subscription
+const purchaseCredits = async (creditPackage: string) => {
+  const response = await api.post('/subscriptions/purchase-credits', {
+    package: creditPackage
+  });
+  return response.data;
+};
 ```
 
-### 3. Employee Subscription Management
+### 2. Employee Sponsorship Management (New)
 
 ```typescript
-// Get organization members for subscription assignment
+// Get organization members for sponsorship
 const getOrganizationMembers = async (organizationId: string, filters?: any) => {
   const response = await api.get(
-    `/employee-subscriptions/organizations/${organizationId}/members`,
+    `/sponsorships/organizations/${organizationId}/members`,
     { params: filters }
   );
   return response.data;
 };
 
-// Create bulk employee subscription
-const createBulkEmployeeSubscription = async (
+// Create bulk employee sponsorships
+const createBulkSponsorship = async (
   organizationId: string,
-  subscriptionData: CreateBulkEmployeeSubscriptionRequest
+  sponsorshipData: CreateBulkSponsorshipRequest
 ) => {
   const response = await api.post(
-    `/employee-subscriptions/bulk/organizations/${organizationId}`,
-    subscriptionData
+    `/sponsorships/bulk/organizations/${organizationId}`,
+    sponsorshipData
   );
   return response.data;
 };
 
-// Get employee's subscription for organization
-const getEmployeeSubscription = async (organizationId: string) => {
+// Get sponsored employees for an organization
+const getSponsoredEmployees = async (organizationId: string) => {
   const response = await api.get(
-    `/employee-subscriptions/my-subscription/organizations/${organizationId}`
+    `/sponsorships/organizations/${organizationId}/sponsored`
   );
   return response.data;
 };
 
-// Consume credits from employee subscription
-const consumeEmployeeCredits = async (
-  subscriptionId: string,
-  organizationId: string,
-  credits: number,
-  description: string
-) => {
-  const response = await api.post(
-    `/employee-subscriptions/${subscriptionId}/consume-credits`,
-    {
-      organizationId,
-      credits,
-      description,
-      metadata: { feature: 'ai-analysis' }
-    }
+// Cancel employee sponsorship
+const cancelSponsorship = async (sponsorshipId: string) => {
+  const response = await api.delete(`/sponsorships/${sponsorshipId}`);
+  return response.data;
+};
+
+// Get sponsorship billing summary
+const getSponsorshipBilling = async (organizationId: string) => {
+  const response = await api.get(
+    `/sponsorships/organizations/${organizationId}/billing`
   );
   return response.data;
 };
 ```
 
-### 4. Frontend Component Example
+### 3. Frontend Component Example (Updated)
 
 ```typescript
 // SubscriptionManager.tsx
 const SubscriptionManager = () => {
-  const [personalSub, setPersonalSub] = useState(null);
-  const [employeeSubs, setEmployeeSubs] = useState([]);
+  const [currentSubscription, setCurrentSubscription] = useState(null);
+  const [sponsorshipInfo, setSponsorshipInfo] = useState(null);
   const { user, activeOrganization } = useAuth();
 
   useEffect(() => {
-    loadSubscriptions();
+    loadSubscriptionData();
   }, [user, activeOrganization]);
 
-  const loadSubscriptions = async () => {
-    // Load personal subscription
-    const personal = await getPersonalSubscription();
-    setPersonalSub(personal);
+  const loadSubscriptionData = async () => {
+    // Load user's individual subscription
+    const subscription = await getPersonalSubscription();
+    setCurrentSubscription(subscription);
 
-    // Load employee subscriptions
-    if (activeOrganization) {
-      const employee = await getEmployeeSubscription(activeOrganization.id);
-      setEmployeeSubs(employee ? [employee] : []);
+    // Check if current subscription is sponsored
+    if (subscription.sponsorshipId) {
+      const sponsorship = await getSponsorshipInfo(subscription.sponsorshipId);
+      setSponsorshipInfo(sponsorship);
     }
   };
 
   const handleAIFeatureRequest = async (credits: number) => {
-    // Try employee subscription first, then personal
-    if (employeeSubs.length > 0 && employeeSubs[0].availableCredits >= credits) {
-      return await consumeEmployeeCredits(
-        employeeSubs[0].id,
-        activeOrganization.id,
-        credits,
-        'AI feature usage'
-      );
-    } else if (personalSub && personalSub.availableCredits >= credits) {
-      return await consumePersonalCredits(credits, 'AI feature usage');
+    // Use individual subscription credits
+    if (currentSubscription && currentSubscription.availableCredits >= credits) {
+      return await consumeCredits(credits, 'AI feature usage');
     } else {
-      throw new Error('Insufficient credits');
+      throw new Error('Insufficient credits. Please upgrade or purchase more credits.');
     }
+  };
+
+  const handleBuyCredits = async (package: string) => {
+    await purchaseCredits(package);
+    await loadSubscriptionData(); // Refresh data
   };
 
   return (
     <div>
-      {/* Personal subscription UI */}
-      {personalSub && (
-        <SubscriptionCard 
-          subscription={personalSub}
-          type="personal"
-          onUpgrade={handleUpgrade}
+      {/* Individual subscription UI */}
+      <SubscriptionCard 
+        subscription={currentSubscription}
+        sponsorshipInfo={sponsorshipInfo}
+        onBuyCredits={handleBuyCredits}
+        onUpgrade={handleUpgrade}
+      />
+      
+      {/* Sponsorship management (for organization owners) */}
+      {user.role === 'OWNER' && activeOrganization && (
+        <SponsorshipManager 
+          organizationId={activeOrganization.id}
+          onCreateSponsorship={handleCreateSponsorship}
         />
       )}
+    </div>
+  );
+};
 
-      {/* Employee subscription UI */}
-      {employeeSubs.map(sub => (
-        <SubscriptionCard
-          key={sub.id}
-          subscription={sub}
-          type="employee"
-          sponsorName={sub.sponsorOrganizationName}
-        />
-      ))}
+// SponsorshipManager.tsx (New Component)
+const SponsorshipManager = ({ organizationId, onCreateSponsorship }) => {
+  const [members, setMembers] = useState([]);
+  const [sponsoredEmployees, setSponsoredEmployees] = useState([]);
+  const [billingInfo, setBillingInfo] = useState(null);
+
+  useEffect(() => {
+    loadSponsorshipData();
+  }, [organizationId]);
+
+  const loadSponsorshipData = async () => {
+    const [membersData, sponsoredData, billingData] = await Promise.all([
+      getOrganizationMembers(organizationId),
+      getSponsoredEmployees(organizationId),
+      getSponsorshipBilling(organizationId)
+    ]);
+    
+    setMembers(membersData);
+    setSponsoredEmployees(sponsoredData);
+    setBillingInfo(billingData);
+  };
+
+  const handleSponsorEmployees = async (selectedEmployees, plan) => {
+    const sponsorshipData = {
+      employees: selectedEmployees,
+      plan: plan // 'PRO' or 'AI'
+    };
+    
+    await onCreateSponsorship(organizationId, sponsorshipData);
+    await loadSponsorshipData(); // Refresh data
+  };
+
+  return (
+    <div>
+      <h3>Sponsor Employee Subscriptions</h3>
+      
+      {/* Available members to sponsor */}
+      <MemberSelection 
+        members={members}
+        onSponsor={handleSponsorEmployees}
+      />
+      
+      {/* Currently sponsored employees */}
+      <SponsoredEmployeesList 
+        employees={sponsoredEmployees}
+        onCancel={cancelSponsorship}
+      />
+      
+      {/* Billing summary */}
+      <BillingSummary billing={billingInfo} />
     </div>
   );
 };
 ```
 
-## RevenueCat Integration
-
-### Webhook Events Handled
-
-| Event | Description | Action |
-|-------|-------------|--------|
-| `INITIAL_PURCHASE` | New subscription | Create subscription record |
-| `RENEWAL` | Subscription renewed | Reset monthly credits |
-| `CANCELLATION` | Subscription cancelled | Mark as inactive |
-| `UNCANCELLATION` | Subscription reactivated | Mark as active |
-| `NON_RENEWING_PURCHASE` | Credit purchase | Add purchased credits |
-| `EXPIRATION` | Subscription expired | Deactivate subscription |
-| `BILLING_ISSUE` | Payment failed | Mark payment issue |
-
-### Webhook Security
+## Request/Response Types (Updated)
 
 ```typescript
-// Webhook signature verification
-const verifyWebhookSignature = (
-  payload: string,
-  signature: string,
-  secret: string
-): boolean => {
-  const expectedSignature = crypto
-    .createHmac('sha256', secret)
-    .update(payload)
-    .digest('hex');
-  
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expectedSignature)
-  );
-};
+// Sponsorship-related types
+interface CreateBulkSponsorshipRequest {
+  employees: Array<{
+    userId: string;
+    plan: 'PRO' | 'AI';
+  }>;
+}
+
+interface SponsorshipInfo {
+  id: string;
+  sponsorUserId: string;
+  sponsorOrganizationName: string;
+  sponsoredUserId: string;
+  plan: 'PRO' | 'AI';
+  monthlyCost: number;
+  isActive: boolean;
+  sponsoredAt: string;
+}
+
+interface BillingInfo {
+  totalMonthlyCost: number;
+  activeSponsorship: number;
+  nextBillingDate: string;
+  billingHistory: BillingRecord[];
+}
+
+interface IndividualSubscription {
+  id: string;
+  userId: string;
+  plan: 'TRIAL' | 'PRO' | 'AI';
+  status: string;
+  totalCredits: number;
+  usedCredits: number;
+  availableCredits: number;
+  purchasedCredits: number;
+  isSponsored: boolean;
+  sponsorshipInfo?: SponsorshipInfo;
+  currentPeriodEnd: string;
+}
 ```
 
-### RevenueCat Configuration
-
-```typescript
-// Frontend - RevenueCat SDK initialization
-import Purchases from '@revenuecat/purchases-js';
-
-// Initialize RevenueCat
-await Purchases.configure({
-  apiKey: process.env.REVENUECAT_PUBLIC_API_KEY,
-  userId: currentUser.id
-});
-
-// Purchase subscription
-const purchaseSubscription = async (productId: string) => {
-  try {
-    const result = await Purchases.purchaseProduct(productId);
-    return result;
-  } catch (error) {
-    console.error('Purchase failed:', error);
-    throw error;
-  }
-};
-```
-
-## Database Schema
-
-### Core Tables
-
-```sql
--- Subscriptions (both personal and employee)
-CREATE TABLE subscriptions (
-  id UUID PRIMARY KEY,
-  user_id UUID NOT NULL, -- Owner/payer
-  revenue_cat_customer_id VARCHAR UNIQUE,
-  plan subscription_plan NOT NULL,
-  status subscription_status NOT NULL,
-  billing_period INTEGER DEFAULT 1,
-  current_period_start TIMESTAMP NOT NULL,
-  current_period_end TIMESTAMP NOT NULL,
-  total_credits INTEGER DEFAULT 0,
-  used_credits INTEGER DEFAULT 0,
-  purchased_credits INTEGER DEFAULT 0,
-  is_active BOOLEAN DEFAULT true,
-  is_employee_subscription BOOLEAN DEFAULT false,
-  sponsor_organization_id UUID, -- For employee subscriptions
-  max_employees INTEGER,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- Employee subscription assignments
-CREATE TABLE employee_subscriptions (
-  id UUID PRIMARY KEY,
-  subscription_id UUID NOT NULL,
-  user_id UUID NOT NULL, -- Employee
-  organization_id UUID NOT NULL,
-  is_active BOOLEAN DEFAULT true,
-  assigned_at TIMESTAMP DEFAULT NOW(),
-  revoked_at TIMESTAMP,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
-  
-  UNIQUE(subscription_id, user_id, organization_id)
-);
-
--- Credit transaction audit trail
-CREATE TABLE credit_transactions (
-  id UUID PRIMARY KEY,
-  user_id UUID NOT NULL,
-  organization_id UUID,
-  subscription_id UUID NOT NULL,
-  type credit_transaction_type NOT NULL,
-  amount INTEGER NOT NULL, -- Negative for consumption
-  description TEXT NOT NULL,
-  metadata JSONB,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-```
-
-## Security and Authorization
+## Security and Authorization (Updated)
 
 ### Role-Based Access Control
 
@@ -463,149 +388,274 @@ CREATE TABLE credit_transactions (
 |--------|-------------------|-------|
 | Create personal subscription | `subscription:create` | User owns subscription |
 | View personal subscription | `subscription:read` | User owns subscription |
-| Consume personal credits | `subscription:use` | User owns subscription |
-| Create employee subscription | `organization:owner` | Organization owner only |
-| Assign employees | `organization:owner` | Organization owner only |
-| View usage reports | `organization:owner` | Organization owner only |
-| Consume employee credits | Employee assignment | Must be assigned to subscription |
+| Consume individual credits | `subscription:use` | User owns subscription |
+| Sponsor employee subscriptions | `organization:owner` | Organization owner only |
+| View sponsorship billing | `organization:owner` | Organization owner only |
+| Cancel sponsorship | `organization:owner` | Organization owner only |
+| View individual usage | `subscription:read` | User owns subscription |
 
-### API Security
 
-```typescript
-// Authentication required for all endpoints
-@UseGuards(AuthGuard, PermissionGuard)
-@Controller('subscriptions')
-export class SubscriptionController {
+## ✅ New Features:
+- Individual subscriptions for each employee
+- Sponsorship relationship tracking
+- Individual billing per sponsored employee
+- Separate credit pools for each user
+- Sponsorship management dashboard
+- Individual usage tracking
 
-  @RequirePermissions('subscription:create')
-  @Post()
-  async createSubscription(@CurrentUser() user: UserEntity) {
-    // Implementation
-  }
+### 📊 Benefits:
+1. **Simplified Credit Management**: Each user manages their own credits
+2. **Better Usage Tracking**: Individual audit trails per user
+3. **Flexible Sponsorship**: Owners can sponsor different plans for different employees
+4. **Scalable Billing**: Each sponsorship is billed separately
+5. **User Independence**: Employees have full control over their individual subscriptions
 
-  @RequirePermissions('organization:owner')
-  @Post('bulk/organizations/:organizationId')
-  async createBulkEmployeeSubscription() {
-    // Implementation
-  }
+This redesigned system maintains the same core functionality while providing true individual subscriptions for each user, whether self-paid or sponsored by an organization owner.
+
+
+
+
+#Schema 
+
+// Subscription Management System Schema
+// This schema focuses on individual subscriptions and employee sponsorship system
+
+// User Model - Represents all users in the system
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  name          String?
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  password      String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Individual subscriptions owned by this user (each user has their own subscription)
+  subscriptions                   Subscription[]
+  
+  // Credit-related activities for this user
+  creditPurchases                 CreditPurchase[]
+  creditTransactions              CreditTransaction[]
+  
+  // Sponsorship relationships
+  sponsoredSubscriptions          EmployeeSubscriptionSponsorship[] @relation("SponsorUser") // Sponsorships they pay for (as organization owner)
+  receivedSponsoredSubscriptions  EmployeeSubscriptionSponsorship[] @relation("SponsoredUser") // Sponsorships they receive (as employee)
 }
-```
 
-## Error Handling and Edge Cases
+// Organization Model - Represents companies/organizations
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique
+  logo      String?
+  createdAt DateTime @default(now())
 
-### Common Error Scenarios
+  // Subscription-related activities within this organization
+  creditPurchases                  CreditPurchase[]
+  creditTransactions               CreditTransaction[]
+  employeeSubscriptionSponsorships EmployeeSubscriptionSponsorship[]
+}
 
-1. **Insufficient Credits**
-   ```typescript
-   if (availableCredits < requestedCredits) {
-     throw new BadRequestException('Insufficient credits');
-   }
-   ```
+// Individual Subscription Model - Each user has their own separate subscription
+// This is the core model representing individual subscription ownership
+model Subscription {
+  id                    String              @id @default(uuid()) @db.Uuid
+  userId                String              @db.Uuid // The user who owns this subscription
+  revenueCatCustomerId  String?             @unique  // RevenueCat customer ID (nullable for trial subscriptions)
+  plan                  SubscriptionPlan    // TRIAL, PRO, or AI
+  status                SubscriptionStatus  // ACTIVE, TRIALING, CANCELED, etc.
+  billingPeriod         Int                 @default(1)  // 1, 6, or 12 months (14 days for trial)
+  currentPeriodStart    DateTime           // When current billing period started
+  currentPeriodEnd      DateTime           // When current billing period ends
+  totalCredits          Int                 @default(0)  // Total credits allocated for current billing period
+  usedCredits           Int                 @default(0)  // Credits consumed in current period
+  purchasedCredits      Int                 @default(0)  // Additional purchased credits (never expire)
+  isActive              Boolean             @default(true) // Whether subscription is currently active
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
 
-2. **Invalid Employee Assignment**
-   ```typescript
-   if (!employeeMember) {
-     throw new BadRequestException(
-       'User is not a member of the target organization'
-     );
-   }
-   ```
+  // Relationships
+  user                            User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creditPurchases                 CreditPurchase[]                // Credit purchases made for this subscription
+  creditTransactions              CreditTransaction[]             // All credit transactions for this subscription
+  employeeSubscriptionSponsorship EmployeeSubscriptionSponsorship? // Optional sponsorship info if this subscription is sponsored
 
-3. **Subscription Limits**
-   ```typescript
-   if (currentAssignments >= maxEmployees) {
-     throw new BadRequestException(
-       `Maximum employee limit (${maxEmployees}) reached`
-     );
-   }
-   ```
+  @@index([userId])
+  @@index([status])
+  @@index([plan])
+}
 
-4. **Plan Restrictions**
-   ```typescript
-   if (subscription.plan === SubscriptionPlan.PRO) {
-     throw new ForbiddenException('PRO plan subscribers cannot use AI credits');
-   }
-   ```
+// Employee Subscription Sponsorship - Tracks when organization owners sponsor employee subscriptions
+// This model creates the relationship between sponsor (owner), sponsored user (employee), and their individual subscription
+// 💡 TIP: Consider using environment variable DISCOUNT for employee subscriptions to apply bulk discounts
+model EmployeeSubscriptionSponsorship {
+  id               String          @id @default(uuid()) @db.Uuid
+  subscriptionId   String          @unique @db.Uuid // One-to-one relationship with the sponsored subscription
+  sponsorUserId    String          @db.Uuid // Organization owner who pays for the subscription
+  sponsoredUserId  String          @db.Uuid // Employee who receives the sponsored subscription
+  organizationId   String          @db.Uuid // Organization context for this sponsorship
+  plan             SubscriptionPlan // The plan being sponsored (PRO or AI)
+  monthlyCost      Decimal         @db.Decimal(10,2) // Cost per month for this sponsorship (consider applying DISCOUNT env variable)
+  discountApplied  Decimal?        @db.Decimal(5,2) // Percentage discount applied (e.g., 0.15 for 15% off)
+  originalPrice    Decimal         @db.Decimal(10,2) // Original price before discount
+  isActive         Boolean         @default(true) // Whether sponsorship is currently active
+  sponsoredAt      DateTime        @default(now()) // When sponsorship started
+  cancelledAt      DateTime? // When sponsorship was cancelled (if applicable)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
-### Frontend Error Handling
+  // Relationships
+  subscription     Subscription     @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  sponsorUser      User             @relation("SponsorUser", fields: [sponsorUserId], references: [id], onDelete: Cascade)
+  sponsoredUser    User             @relation("SponsoredUser", fields: [sponsoredUserId], references: [id], onDelete: Cascade)
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  billingRecords   SponsorshipBilling[] // Individual billing records for this sponsorship
 
-```typescript
-const handleSubscriptionAction = async (action: () => Promise<any>) => {
-  try {
-    return await action();
-  } catch (error) {
-    switch (error.status) {
-      case 400:
-        toast.error('Invalid request: ' + error.message);
-        break;
-      case 403:
-        toast.error('Access denied: ' + error.message);
-        break;
-      case 404:
-        toast.error('Subscription not found');
-        break;
-      default:
-        toast.error('Something went wrong. Please try again.');
-    }
-    throw error;
-  }
-};
-```
+  // Ensure one sponsorship per employee per organization per sponsor
+  @@unique([sponsoredUserId, organizationId, sponsorUserId])
+  @@index([sponsorUserId])
+  @@index([sponsoredUserId])
+  @@index([organizationId])
+  @@index([isActive])
+}
 
-## Monitoring and Analytics
+// Sponsorship Billing - Individual billing records for each sponsored subscription
+// Tracks payment history and billing cycles for sponsored employee subscriptions
+// 💡 TIP: Amount should reflect discounted price when DISCOUNT environment variable is applied
+model SponsorshipBilling {
+  id                      String   @id @default(uuid()) @db.Uuid
+  sponsorshipId           String   @db.Uuid // Links to the sponsorship being billed
+  sponsorUserId           String   @db.Uuid // Who is being charged
+  billingPeriodStart      DateTime // Start of billing period
+  billingPeriodEnd        DateTime // End of billing period
+  amount                  Decimal  @db.Decimal(10,2) // Final amount charged (after discount applied)
+  originalAmount          Decimal? @db.Decimal(10,2) // Original amount before discount
+  discountAmount          Decimal? @db.Decimal(10,2) // Amount saved due to discount
+  status                  String   @default("pending") // pending, paid, failed, refunded
+  revenueCatTransactionId String? // RevenueCat transaction reference
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
-### Key Metrics to Track
+  // Relationships
+  sponsorship EmployeeSubscriptionSponsorship @relation(fields: [sponsorshipId], references: [id], onDelete: Cascade)
 
-1. **Subscription Metrics**
-   - Trial to paid conversion rate
-   - Monthly recurring revenue (MRR)
-   - Customer lifetime value (CLV)
-   - Churn rate
+  @@index([sponsorUserId])
+  @@index([sponsorshipId])
+  @@index([status])
+  @@index([billingPeriodStart])
+}
 
-2. **Credit Usage Metrics**
-   - Average credits per user per month
-   - Most popular AI features
-   - Credit purchase patterns
+// Credit Package - Defines available credit packages for purchase
+// Represents different credit bundles users can buy to supplement their monthly allocation
+model CreditPackage {
+  id                    String   @id @default(uuid()) @db.Uuid
+  name                  String   // Display name (e.g., "Starter Pack", "Power User Bundle")
+  credits               Int      // Number of credits in this package
+  price                 Int      // Price in cents (e.g., 999 = $9.99)
+  currency              String   @default("USD")
+  revenueCatProductId   String   @unique // RevenueCat product identifier
+  isActive              Boolean  @default(true) // Whether this package is currently available for purchase
+  sortOrder             Int      @default(0) // Display order in the UI
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-3. **Employee Subscription Metrics**
-   - Average employees per subscription
-   - Organization adoption rate
-   - Shared credit utilization
+  // Relationships
+  creditPurchases CreditPurchase[] // All purchases of this package
 
-### Logging and Audit Trail
+  @@index([isActive])
+  @@index([sortOrder])
+}
 
-```typescript
-// All credit transactions are logged
-await this.prisma.creditTransaction.create({
-  data: {
-    userId,
-    organizationId,
-    subscriptionId,
-    type: 'CONSUMED',
-    amount: -credits,
-    description: 'AI feature usage',
-    metadata: { feature: 'product-optimization' }
-  }
-});
-```
+// Credit Purchase - Records when users purchase additional credits
+// Tracks individual credit purchase transactions beyond monthly allocations
+model CreditPurchase {
+  id                      String         @id @default(uuid()) @db.Uuid
+  userId                  String         @db.Uuid // User who made the purchase
+  organizationId          String         @db.Uuid // Organization context for the purchase
+  subscriptionId          String         @db.Uuid // Which subscription the credits are added to
+  creditPackageId         String         @db.Uuid // Which credit package was purchased
+  revenueCatTransactionId String         @unique // RevenueCat transaction reference
+  credits                 Int            // Number of credits purchased
+  price                   Int            // Amount paid in cents
+  currency                String         @default("USD")
+  status                  PurchaseStatus // PENDING, COMPLETED, FAILED, REFUNDED
+  purchasedAt             DateTime       // When the purchase was made
+  refundedAt              DateTime?      // When refunded (if applicable)
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
 
-## Testing Strategy
+  // Relationships
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscription  Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  creditPackage CreditPackage @relation(fields: [creditPackageId], references: [id], onDelete: Cascade)
 
-### Unit Tests
-- Subscription service methods
-- Credit calculation logic
-- Permission validation
-- Webhook processing
+  @@index([userId])
+  @@index([organizationId])
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([purchasedAt])
+}
 
-### Integration Tests
-- Complete subscription flows
-- RevenueCat webhook handling
-- Database transactions
-- API endpoint testing
+// Credit Transaction - Audit trail of all credit movements
+// Provides complete history of credit allocations, consumption, and adjustments for each user
+model CreditTransaction {
+  id              String                @id @default(uuid()) @db.Uuid
+  userId          String                @db.Uuid // User whose credits were affected
+  organizationId  String                @db.Uuid // Organization context
+  subscriptionId  String?               @db.Uuid // Related subscription (nullable for system transactions)
+  type            CreditTransactionType // Type of transaction (see enum below)
+  amount          Int                   // Credit change amount (positive for additions, negative for consumption)
+  description     String                // Human-readable description of the transaction
+  metadata        Json?                 // Additional data (feature used, AI model, etc.)
+  createdAt       DateTime              @default(now())
 
-### E2E Tests
-- User registration → trial → upgrade flow
-- Organization owner → employee subscription → usage flow
-- Payment processing and webhook integration
+  // Relationships
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
 
-This comprehensive system provides a robust foundation for managing both individual and organization-based subscriptions with proper credit tracking, security, and integration with RevenueCat payment processing.
+  @@index([userId])
+  @@index([organizationId])
+  @@index([subscriptionId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// Enums
+
+// Subscription Plans Available
+enum SubscriptionPlan {
+  TRIAL // 14-day free trial with 50 AI credits
+  PRO   // $9.99/month - Basic features, no AI credits
+  AI    // $19.99/month - Full features with 100 monthly AI credits
+}
+
+// Subscription Status States
+enum SubscriptionStatus {
+  ACTIVE     // Subscription is active and user has access
+  TRIALING   // User is in trial period
+  PAST_DUE   // Payment failed but still have access
+  CANCELED   // Subscription cancelled but may still have access until period end
+  UNPAID     // Payment failed and access is restricted
+  PAUSED     // Subscription temporarily paused
+}
+
+// Credit Purchase Status
+enum PurchaseStatus {
+  PENDING   // Purchase initiated but not yet confirmed
+  COMPLETED // Purchase successful and credits added
+  FAILED    // Purchase failed
+  REFUNDED  // Purchase was refunded and credits removed
+}
+
+// Types of Credit Transactions for Audit Trail
+enum CreditTransactionType {
+  TRIAL_ALLOCATION  // Credits allocated when user starts trial
+  PERIOD_ALLOCATION // Monthly credits allocated at billing cycle
+  PURCHASED         // Credits added from purchase
+  CONSUMED          // Credits used for AI features
+  REFUNDED          // Credits added back due to refund
+  EXPIRED           // Credits removed due to expiration (if implemented)
+}
