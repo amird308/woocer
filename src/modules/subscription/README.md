@@ -24,7 +24,7 @@ This module implements a dual-credit system for the WooCommerce store management
 - `GET /subscriptions/current` - Get current user subscription with credit details
 - `GET /subscriptions/:id` - Get subscription by ID
 - `PUT /subscriptions/:id` - Update subscription
-- `POST /subscriptions/consume-credits` - Consume credits
+- `POST /subscriptions/consume-credits` - Consume credits from personal subscription
 - `POST /subscriptions/:id/reset-monthly-credits` - Reset monthly credits (admin)
 
 ### Credit Packages

@@ -41,7 +41,7 @@ export class SubscriptionController {
 
   @Post()
   @RequirePermissions('subscription:create')
-  @ApiOperation({ summary: 'Create a new subscription' })
+  @ApiOperation({ summary: 'Create a personal subscription' })
   @ApiResponse({
     status: HttpStatus.CREATED,
     description: 'Subscription created successfully',
@@ -51,19 +51,14 @@ export class SubscriptionController {
     @CurrentUser() user: UserEntity,
     @Body() createSubscriptionDto: CreateSubscriptionRequestDto,
   ): Promise<ApiResponseDto<SubscriptionResponseDto>> {
-    // For now, we'll use the user's first organization
-    // In a real implementation, this would come from the request context
-    const organizationId = user.id; // This is a placeholder - should be actual organization ID
-
     const subscription = await this.subscriptionService.createSubscription(
       user.id,
-      organizationId,
       createSubscriptionDto,
     );
 
     return {
       success: true,
-      message: 'Subscription created successfully',
+      message: 'Personal subscription created successfully',
       data: subscription,
     };
   }
@@ -81,20 +76,15 @@ export class SubscriptionController {
   async getCurrentSubscription(
     @CurrentUser() user: UserEntity,
   ): Promise<ApiResponseDto<SubscriptionWithCreditsResponseDto | null>> {
-    // For now, we'll use the user's first organization
-    const organizationId = user.id; // This is a placeholder - should be actual organization ID
-
-    const subscription =
-      await this.subscriptionService.getSubscriptionByUserAndOrganization(
-        user.id,
-        organizationId,
-      );
+    const subscription = await this.subscriptionService.getSubscriptionByUser(
+      user.id,
+    );
 
     return {
       success: true,
       message: subscription
-        ? 'Subscription retrieved successfully'
-        : 'No subscription found',
+        ? 'Personal subscription retrieved successfully'
+        : 'No personal subscription found',
       data: subscription,
     };
   }
@@ -145,7 +135,7 @@ export class SubscriptionController {
 
   @Post('consume-credits')
   @RequirePermissions('subscription:use')
-  @ApiOperation({ summary: 'Consume credits from current subscription' })
+  @ApiOperation({ summary: 'Consume credits from personal subscription' })
   @ApiResponse({
     status: HttpStatus.OK,
     description: 'Credits consumed successfully',
@@ -155,12 +145,8 @@ export class SubscriptionController {
     @CurrentUser() user: UserEntity,
     @Body() consumeCreditsDto: ConsumeCreditsRequestDto,
   ): Promise<ApiResponseDto<CreditConsumptionResponseDto>> {
-    // For now, we'll use the user's first organization
-    const organizationId = user.id; // This is a placeholder - should be actual organization ID
-
     const result = await this.subscriptionService.consumeCredits(
       user.id,
-      organizationId,
       consumeCreditsDto,
     );
 
@@ -171,22 +157,92 @@ export class SubscriptionController {
     };
   }
 
-  @Post(':id/reset-monthly-credits')
-  @RequirePermissions('subscription:admin')
-  @ApiOperation({ summary: 'Reset monthly credits (admin only)' })
+  @Get('trial')
+  @RequirePermissions('subscription:read')
+  @ApiOperation({ summary: 'Get trial subscription status' })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: 'Monthly credits reset successfully',
-    type: SubscriptionResponseDto,
+    description: 'Trial subscription status retrieved successfully',
+    type: SubscriptionWithCreditsResponseDto,
   })
-  async resetMonthlyCredits(
-    @Param('id') id: string,
-  ): Promise<ApiResponseDto<SubscriptionResponseDto>> {
-    const subscription = await this.subscriptionService.resetMonthlyCredits(id);
+  async getTrialSubscription(
+    @CurrentUser() user: UserEntity,
+  ): Promise<ApiResponseDto<SubscriptionWithCreditsResponseDto | null>> {
+    const subscription = await this.subscriptionService.getTrialSubscription(
+      user.id,
+    );
 
     return {
       success: true,
-      message: 'Monthly credits reset successfully',
+      message: subscription
+        ? 'Trial subscription retrieved successfully'
+        : 'No trial subscription found',
+      data: subscription,
+    };
+  }
+
+  @Post('trial')
+  @RequirePermissions('subscription:create')
+  @ApiOperation({ summary: 'Create trial subscription' })
+  @ApiResponse({
+    status: HttpStatus.CREATED,
+    description: 'Trial subscription created successfully',
+    type: SubscriptionResponseDto,
+  })
+  async createTrialSubscription(
+    @CurrentUser() user: UserEntity,
+  ): Promise<ApiResponseDto<SubscriptionResponseDto>> {
+    const subscription = await this.subscriptionService.createTrialSubscription(
+      user.id,
+    );
+
+    return {
+      success: true,
+      message: 'Trial subscription created successfully',
+      data: subscription,
+    };
+  }
+
+  @Post('trial/convert')
+  @RequirePermissions('subscription:create')
+  @ApiOperation({ summary: 'Convert trial to paid subscription' })
+  @ApiResponse({
+    status: HttpStatus.CREATED,
+    description: 'Trial converted to paid subscription successfully',
+    type: SubscriptionResponseDto,
+  })
+  async convertTrialToPaid(
+    @CurrentUser() user: UserEntity,
+    @Body() createSubscriptionDto: CreateSubscriptionRequestDto,
+  ): Promise<ApiResponseDto<SubscriptionResponseDto>> {
+    const subscription = await this.subscriptionService.convertTrialToPaid(
+      user.id,
+      createSubscriptionDto,
+    );
+
+    return {
+      success: true,
+      message: 'Trial converted to paid subscription successfully',
+      data: subscription,
+    };
+  }
+
+  @Post(':id/reset-period-credits')
+  @RequirePermissions('subscription:admin')
+  @ApiOperation({ summary: 'Reset period credits (admin only)' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Period credits reset successfully',
+    type: SubscriptionResponseDto,
+  })
+  async resetPeriodCredits(
+    @Param('id') id: string,
+  ): Promise<ApiResponseDto<SubscriptionResponseDto>> {
+    const subscription = await this.subscriptionService.resetPeriodCredits(id);
+
+    return {
+      success: true,
+      message: 'Period credits reset successfully',
       data: subscription,
     };
   }

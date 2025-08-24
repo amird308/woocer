@@ -26,13 +26,14 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  sessions   Session[]
-  accounts   Account[]
-  members    Member[]
-  invitations Invitation[] @relation("inviter")
-  subscriptions Subscription[]
-  creditPurchases CreditPurchase[]
-  creditTransactions CreditTransaction[]
+  sessions              Session[]
+  accounts              Account[]
+  members               Member[]
+  invitations           Invitation[] @relation("inviter")
+  subscriptions         Subscription[]
+  creditPurchases       CreditPurchase[]
+  creditTransactions    CreditTransaction[]
+  employeeSubscriptions EmployeeSubscription[]
 }
 
 // Better Auth Session Model
@@ -98,14 +99,15 @@ model Organization {
   privateSecretKey String?
   publicSecretKey String?
 
-  members     Member[]
-  invitations Invitation[]
-  teams       Team[]
-  sessions    Session[]
-  wooCommerceWebhooks  WooCommerceWebhook[]
-  subscriptions Subscription[]
-  creditPurchases CreditPurchase[]
-  creditTransactions CreditTransaction[]
+  members                Member[]
+  invitations            Invitation[]
+  teams                  Team[]
+  sessions               Session[]
+  wooCommerceWebhooks    WooCommerceWebhook[]
+  creditPurchases        CreditPurchase[]
+  creditTransactions     CreditTransaction[]
+  employeeSubscriptions  EmployeeSubscription[]
+  sponsoredSubscriptions Subscription[] @relation("SponsoredSubscriptions")
 }
 
 model Member {
@@ -184,29 +186,60 @@ model WooCommerceWebhook {
 model Subscription {
   id                    String              @id @default(uuid()) @db.Uuid
   userId                String              @db.Uuid
-  organizationId        String              @db.Uuid
-  revenueCatCustomerId  String
+  revenueCatCustomerId  String?             @unique  // Nullable for trial subscriptions
   plan                  SubscriptionPlan
   status                SubscriptionStatus
+  billingPeriod         Int                 @default(1)  // 1, 6, or 12 months (14 days for trial)
   currentPeriodStart    DateTime
   currentPeriodEnd      DateTime
-  monthlyCredits        Int                 @default(0)
-  usedMonthlyCredits    Int                 @default(0)
-  purchasedCredits      Int                 @default(0)
+  totalCredits          Int                 @default(0)  // Total credits allocated for billing period
+  usedCredits           Int                 @default(0)  // Credits used in current period
+  purchasedCredits      Int                 @default(0)  // Additional purchased credits (never expire)
   isActive              Boolean             @default(true)
+  // Employee subscription fields
+  isEmployeeSubscription Boolean            @default(false)
+  sponsorOrganizationId String?             @db.Uuid  // Organization that pays for this subscription
+  maxEmployees          Int?                // Max employees that can use this subscription
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
 
-  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  creditPurchases   CreditPurchase[]
-  creditTransactions CreditTransaction[]
+  user                    User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sponsorOrganization     Organization?             @relation("SponsoredSubscriptions", fields: [sponsorOrganizationId], references: [id], onDelete: SetNull)
+  creditPurchases         CreditPurchase[]
+  creditTransactions      CreditTransaction[]
+  employeeSubscriptions   EmployeeSubscription[]
 
-  @@unique([userId, organizationId])
-  @@index([organizationId])
+  @@index([userId])
   @@index([status])
   @@index([plan])
+  @@index([isEmployeeSubscription])
+  @@index([sponsorOrganizationId])
 }
+
+// Junction table for employee subscription usage across organizations
+model EmployeeSubscription {
+  id              String   @id @default(uuid()) @db.Uuid
+  subscriptionId  String   @db.Uuid
+  userId          String   @db.Uuid
+  organizationId  String   @db.Uuid
+  isActive        Boolean  @default(true)
+  assignedAt      DateTime @default(now())
+  revokedAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  subscription  Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, userId, organizationId])
+  @@index([subscriptionId])
+  @@index([userId])
+  @@index([organizationId])
+  @@index([isActive])
+}
+
+
 
 model CreditPackage {
   id                    String   @id @default(uuid()) @db.Uuid
@@ -277,6 +310,7 @@ model CreditTransaction {
 }
 
 enum SubscriptionPlan {
+  TRIAL
   PRO
   AI
 }
@@ -298,7 +332,8 @@ enum PurchaseStatus {
 }
 
 enum CreditTransactionType {
-  MONTHLY_ALLOCATION
+  TRIAL_ALLOCATION
+  PERIOD_ALLOCATION
   PURCHASED
   CONSUMED
   REFUNDED

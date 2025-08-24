@@ -12,10 +12,11 @@ export class SubscriptionResponseDto
       | 'id'
       | 'plan'
       | 'status'
+      | 'billingPeriod'
       | 'currentPeriodStart'
       | 'currentPeriodEnd'
-      | 'monthlyCredits'
-      | 'usedMonthlyCredits'
+      | 'totalCredits'
+      | 'usedCredits'
       | 'purchasedCredits'
       | 'isActive'
       | 'createdAt'
@@ -34,19 +35,22 @@ export class SubscriptionResponseDto
   @ApiProperty({ enum: SubscriptionStatus, description: 'Subscription status' })
   status: SubscriptionStatus;
 
+  @ApiProperty({ description: 'Billing period in months (14 days for trial)' })
+  billingPeriod: number;
+
   @ApiProperty({ description: 'Current period start date' })
   currentPeriodStart: Date;
 
   @ApiProperty({ description: 'Current period end date' })
   currentPeriodEnd: Date;
 
-  @ApiProperty({ description: 'Monthly credits allocation' })
-  monthlyCredits: number;
+  @ApiProperty({ description: 'Total credits allocated for billing period' })
+  totalCredits: number;
 
-  @ApiProperty({ description: 'Used monthly credits' })
-  usedMonthlyCredits: number;
+  @ApiProperty({ description: 'Credits used in current period' })
+  usedCredits: number;
 
-  @ApiProperty({ description: 'Purchased credits' })
+  @ApiProperty({ description: 'Additional purchased credits (never expire)' })
   purchasedCredits: number;
 
   @ApiProperty({ description: 'Whether subscription is active' })
@@ -61,12 +65,12 @@ export class SubscriptionResponseDto
 
 export class SubscriptionWithCreditsResponseDto extends SubscriptionResponseDto {
   @ApiProperty({
-    description: 'Total available credits (monthly + purchased - used)',
+    description: 'Total available credits (total + purchased - used)',
   })
   availableCredits: number;
 
-  @ApiProperty({ description: 'Available monthly credits (monthly - used)' })
-  availableMonthlyCredits: number;
+  @ApiProperty({ description: 'Available total credits (total - used)' })
+  availableTotalCredits: number;
 
   @ApiProperty({ description: 'Available purchased credits' })
   availablePurchasedCredits: number;
@@ -79,8 +83,8 @@ export class CreditConsumptionResponseDto {
   @ApiProperty({ description: 'Credits consumed' })
   creditsConsumed: number;
 
-  @ApiProperty({ description: 'Credits consumed from monthly allocation' })
-  monthlyCreditsUsed: number;
+  @ApiProperty({ description: 'Credits consumed from total allocation' })
+  totalCreditsUsed: number;
 
   @ApiProperty({ description: 'Credits consumed from purchased credits' })
   purchasedCreditsUsed: number;

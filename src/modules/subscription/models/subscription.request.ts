@@ -16,9 +16,10 @@ import {
 export class CreateSubscriptionRequestDto
   implements Partial<SubscriptionEntity>
 {
-  @ApiProperty({ description: 'RevenueCat customer ID' })
+  @ApiProperty({ description: 'RevenueCat customer ID', required: false })
+  @IsOptional()
   @IsString()
-  revenueCatCustomerId: string;
+  revenueCatCustomerId?: string;
 
   @ApiProperty({
     enum: SubscriptionPlan,
@@ -31,6 +32,14 @@ export class CreateSubscriptionRequestDto
   @IsEnum(SubscriptionStatus)
   status: SubscriptionStatus;
 
+  @ApiProperty({
+    description: 'Billing period in months (14 days for trial)',
+    example: 1,
+  })
+  @IsInt()
+  @Min(1)
+  billingPeriod: number;
+
   @ApiProperty({ description: 'Current period start date' })
   @IsDateString()
   currentPeriodStart: Date;
@@ -38,12 +47,6 @@ export class CreateSubscriptionRequestDto
   @ApiProperty({ description: 'Current period end date' })
   @IsDateString()
   currentPeriodEnd: Date;
-
-  @ApiProperty({ description: 'Monthly credits allocation', required: false })
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  monthlyCredits?: number;
 }
 
 export class UpdateSubscriptionRequestDto
@@ -67,6 +70,12 @@ export class UpdateSubscriptionRequestDto
   @IsEnum(SubscriptionStatus)
   status?: SubscriptionStatus;
 
+  @ApiProperty({ description: 'Billing period in months', required: false })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  billingPeriod?: number;
+
   @ApiProperty({ description: 'Current period start date', required: false })
   @IsOptional()
   @IsDateString()
@@ -77,17 +86,17 @@ export class UpdateSubscriptionRequestDto
   @IsDateString()
   currentPeriodEnd?: Date;
 
-  @ApiProperty({ description: 'Monthly credits allocation', required: false })
+  @ApiProperty({ description: 'Total credits allocation', required: false })
   @IsOptional()
   @IsInt()
   @Min(0)
-  monthlyCredits?: number;
+  totalCredits?: number;
 
-  @ApiProperty({ description: 'Used monthly credits', required: false })
+  @ApiProperty({ description: 'Used credits', required: false })
   @IsOptional()
   @IsInt()
   @Min(0)
-  usedMonthlyCredits?: number;
+  usedCredits?: number;
 
   @ApiProperty({ description: 'Purchased credits', required: false })
   @IsOptional()
