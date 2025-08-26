@@ -7,6 +7,7 @@ import {
   Logger,
   HttpCode,
   HttpStatus,
+  Body,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { WooCommerceService } from './woocommerce.service';
@@ -26,9 +27,12 @@ export class WooCommerceController {
     @Request() req: RawBodyRequest<Request>,
     @Headers('x-wc-webhook-signature') signature: string,
     @Headers('x-wc-webhook-id') webhookId: string,
+    @Body() body: Woocommerce.Order,
   ): Promise<{ success: boolean }> {
+    console.log('handleOrderCreated', signature, webhookId, body);
     return this.wooCommerceService.handleWebhook(
       req,
+      body,
       signature,
       webhookId,
       'order.created',
@@ -43,9 +47,11 @@ export class WooCommerceController {
     @Request() req: RawBodyRequest<Request>,
     @Headers('x-wc-webhook-signature') signature: string,
     @Headers('x-wc-webhook-id') webhookId: string,
+    @Body() body: Woocommerce.Order,
   ): Promise<{ success: boolean }> {
     return this.wooCommerceService.handleWebhook(
       req,
+      body,
       signature,
       webhookId,
       'order.updated',
@@ -60,9 +66,11 @@ export class WooCommerceController {
     @Request() req: RawBodyRequest<Request>,
     @Headers('x-wc-webhook-signature') signature: string,
     @Headers('x-wc-webhook-id') webhookId: string,
+    @Body() body: Woocommerce.Product,
   ): Promise<{ success: boolean }> {
     return this.wooCommerceService.handleWebhook(
       req,
+      body,
       signature,
       webhookId,
       'product.created',
@@ -77,9 +85,11 @@ export class WooCommerceController {
     @Request() req: RawBodyRequest<Request>,
     @Headers('x-wc-webhook-signature') signature: string,
     @Headers('x-wc-webhook-id') webhookId: string,
+    @Body() body: Woocommerce.Product,
   ): Promise<{ success: boolean }> {
     return this.wooCommerceService.handleWebhook(
       req,
+      body,
       signature,
       webhookId,
       'product.updated',

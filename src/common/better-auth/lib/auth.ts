@@ -97,7 +97,7 @@ export const auth = betterAuth({
       },
       // Organization plugin configuration
       allowUserToCreateOrganization: true,
-      organizationLimit: 5,
+      organizationLimit: 10,
       creatorRole: 'OWNER',
       membershipLimit: 100,
       organizationCreation: {
