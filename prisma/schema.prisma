@@ -33,7 +33,10 @@ model User {
   subscriptions         Subscription[]
   creditPurchases       CreditPurchase[]
   creditTransactions    CreditTransaction[]
-  employeeSubscriptions EmployeeSubscription[]
+  
+  // Sponsorship relationships
+  sponsoredSubscriptions          EmployeeSubscriptionSponsorship[] @relation("SponsorUser") // Sponsorships they pay for (as organization owner)
+  receivedSponsoredSubscriptions  EmployeeSubscriptionSponsorship[] @relation("SponsoredUser") // Sponsorships they receive (as employee)
 }
 
 // Better Auth Session Model
@@ -106,8 +109,7 @@ model Organization {
   wooCommerceWebhooks    WooCommerceWebhook[]
   creditPurchases        CreditPurchase[]
   creditTransactions     CreditTransaction[]
-  employeeSubscriptions  EmployeeSubscription[]
-  sponsoredSubscriptions Subscription[] @relation("SponsoredSubscriptions")
+  employeeSubscriptionSponsorships EmployeeSubscriptionSponsorship[]
 }
 
 model Member {
@@ -182,61 +184,93 @@ model WooCommerceWebhook {
   @@index([status])
 }
 
-// Subscription Management Models
+// Individual Subscription Model - Each user has their own separate subscription
+// This is the core model representing individual subscription ownership
 model Subscription {
   id                    String              @id @default(uuid()) @db.Uuid
-  userId                String              @db.Uuid
-  revenueCatCustomerId  String?             @unique  // Nullable for trial subscriptions
-  plan                  SubscriptionPlan
-  status                SubscriptionStatus
+  userId                String              @db.Uuid // The user who owns this subscription
+  revenueCatCustomerId  String?             @unique  // RevenueCat customer ID (nullable for trial subscriptions)
+  plan                  SubscriptionPlan    // TRIAL, PRO, or AI
+  status                SubscriptionStatus  // ACTIVE, TRIALING, CANCELED, etc.
   billingPeriod         Int                 @default(1)  // 1, 6, or 12 months (14 days for trial)
-  currentPeriodStart    DateTime
-  currentPeriodEnd      DateTime
-  totalCredits          Int                 @default(0)  // Total credits allocated for billing period
-  usedCredits           Int                 @default(0)  // Credits used in current period
+  currentPeriodStart    DateTime           // When current billing period started
+  currentPeriodEnd      DateTime           // When current billing period ends
+  totalCredits          Int                 @default(0)  // Total credits allocated for current billing period
+  usedCredits           Int                 @default(0)  // Credits consumed in current period
   purchasedCredits      Int                 @default(0)  // Additional purchased credits (never expire)
-  isActive              Boolean             @default(true)
-  // Employee subscription fields
-  isEmployeeSubscription Boolean            @default(false)
-  sponsorOrganizationId String?             @db.Uuid  // Organization that pays for this subscription
-  maxEmployees          Int?                // Max employees that can use this subscription
+  isActive              Boolean             @default(true) // Whether subscription is currently active
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
 
-  user                    User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sponsorOrganization     Organization?             @relation("SponsoredSubscriptions", fields: [sponsorOrganizationId], references: [id], onDelete: SetNull)
-  creditPurchases         CreditPurchase[]
-  creditTransactions      CreditTransaction[]
-  employeeSubscriptions   EmployeeSubscription[]
+  // Relationships
+  user                            User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creditPurchases                 CreditPurchase[]                // Credit purchases made for this subscription
+  creditTransactions              CreditTransaction[]             // All credit transactions for this subscription
+  employeeSubscriptionSponsorship EmployeeSubscriptionSponsorship? // Optional sponsorship info if this subscription is sponsored
 
   @@index([userId])
   @@index([status])
   @@index([plan])
-  @@index([isEmployeeSubscription])
-  @@index([sponsorOrganizationId])
 }
 
-// Junction table for employee subscription usage across organizations
-model EmployeeSubscription {
-  id              String   @id @default(uuid()) @db.Uuid
-  subscriptionId  String   @db.Uuid
-  userId          String   @db.Uuid
-  organizationId  String   @db.Uuid
-  isActive        Boolean  @default(true)
-  assignedAt      DateTime @default(now())
-  revokedAt       DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+// Employee Subscription Sponsorship - Tracks when organization owners sponsor employee subscriptions
+// This model creates the relationship between sponsor (owner), sponsored user (employee), and their individual subscription
+// 💡 TIP: Consider using environment variable DISCOUNT for employee subscriptions to apply bulk discounts
+model EmployeeSubscriptionSponsorship {
+  id               String          @id @default(uuid()) @db.Uuid
+  subscriptionId   String          @unique @db.Uuid // One-to-one relationship with the sponsored subscription
+  sponsorUserId    String          @db.Uuid // Organization owner who pays for the subscription
+  sponsoredUserId  String          @db.Uuid // Employee who receives the sponsored subscription
+  organizationId   String          @db.Uuid // Organization context for this sponsorship
+  plan             SubscriptionPlan // The plan being sponsored (PRO or AI)
+  monthlyCost      Decimal         @db.Decimal(10,2) // Cost per month for this sponsorship (consider applying DISCOUNT env variable)
+  discountApplied  Decimal?        @db.Decimal(5,2) // Percentage discount applied (e.g., 0.15 for 15% off)
+  originalPrice    Decimal         @db.Decimal(10,2) // Original price before discount
+  isActive         Boolean         @default(true) // Whether sponsorship is currently active
+  sponsoredAt      DateTime        @default(now()) // When sponsorship started
+  cancelledAt      DateTime? // When sponsorship was cancelled (if applicable)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
-  subscription  Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Relationships
+  subscription     Subscription     @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  sponsorUser      User             @relation("SponsorUser", fields: [sponsorUserId], references: [id], onDelete: Cascade)
+  sponsoredUser    User             @relation("SponsoredUser", fields: [sponsoredUserId], references: [id], onDelete: Cascade)
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  billingRecords   SponsorshipBilling[] // Individual billing records for this sponsorship
 
-  @@unique([subscriptionId, userId, organizationId])
-  @@index([subscriptionId])
-  @@index([userId])
+  // Ensure one sponsorship per employee per organization per sponsor
+  @@unique([sponsoredUserId, organizationId, sponsorUserId])
+  @@index([sponsorUserId])
+  @@index([sponsoredUserId])
   @@index([organizationId])
   @@index([isActive])
+}
+
+// Sponsorship Billing - Individual billing records for each sponsored subscription
+// Tracks payment history and billing cycles for sponsored employee subscriptions
+// 💡 TIP: Amount should reflect discounted price when DISCOUNT environment variable is applied
+model SponsorshipBilling {
+  id                      String   @id @default(uuid()) @db.Uuid
+  sponsorshipId           String   @db.Uuid // Links to the sponsorship being billed
+  sponsorUserId           String   @db.Uuid // Who is being charged
+  billingPeriodStart      DateTime // Start of billing period
+  billingPeriodEnd        DateTime // End of billing period
+  amount                  Decimal  @db.Decimal(10,2) // Final amount charged (after discount applied)
+  originalAmount          Decimal? @db.Decimal(10,2) // Original amount before discount
+  discountAmount          Decimal? @db.Decimal(10,2) // Amount saved due to discount
+  status                  String   @default("pending") // pending, paid, failed, refunded
+  revenueCatTransactionId String? // RevenueCat transaction reference
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  // Relationships
+  sponsorship EmployeeSubscriptionSponsorship @relation(fields: [sponsorshipId], references: [id], onDelete: Cascade)
+
+  @@index([sponsorUserId])
+  @@index([sponsorshipId])
+  @@index([status])
+  @@index([billingPeriodStart])
 }
 
 
