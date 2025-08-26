@@ -1,6 +1,10 @@
 #!/usr/bin/env ts-node
 
+import * as dotenv from 'dotenv';
 import { AsymmetricEncryption } from '../common/utilities/encryption.util';
+
+// Load environment variables from .env file
+dotenv.config();
 
 interface WooCommerceCredentials {
   consumerKey: string;
@@ -70,43 +74,15 @@ function encryptWooCommerceData(
 }
 
 /**
- * Get credentials from command line arguments
- */
-function getCredentialsFromArgs(): WooCommerceCredentials {
-  const args = process.argv.slice(2);
-
-  if (args.length !== 4) {
-    console.error('❌ Invalid number of arguments');
-    console.log(
-      'Usage: ts-node encrypt-woocommerce-data.ts <consumerKey> <consumerSecret> <serverPublicKey>',
-    );
-    console.log('');
-    console.log('Example:');
-    console.log(
-      'ts-node encrypt-woocommerce-data.ts "ck_abc123" "cs_def456" "-----BEGIN PUBLIC KEY-----\\nMIIBIjANBgkq..."',
-    );
-    console.log('');
-    console.log(
-      '💡 Tip: If your public key contains \\n characters, they will be automatically converted to newlines',
-    );
-    process.exit(1);
-  }
-
-  return {
-    consumerKey: args[0],
-    consumerSecret: args[1],
-    serverPublicKey: args[3],
-  };
-}
-
-/**
  * Get credentials from environment variables
  */
 function getCredentialsFromEnv(): WooCommerceCredentials {
   const consumerKey = process.env.CONSUMER_KEY;
   const consumerSecret = process.env.CONSUMER_SECRET;
   const serverPublicKey = process.env.SERVER_PUBLIC_KEY;
-
+  console.log('consumerKey', consumerKey);
+  console.log('consumerSecret', consumerSecret);
+  console.log('serverPublicKey', serverPublicKey);
   if (!consumerKey || !consumerSecret || !serverPublicKey) {
     throw new Error(
       'Missing required environment variables: CONSUMER_KEY, CONSUMER_SECRET, SERVER_PUBLIC_KEY',
@@ -128,16 +104,7 @@ async function main() {
     console.log('🚀 WooCommerce Data Encryption Script');
     console.log('=====================================');
 
-    let credentials: WooCommerceCredentials;
-
-    // Try to get credentials from command line arguments first, then environment variables
-    if (process.argv.length > 2) {
-      console.log('📋 Reading credentials from command line arguments...');
-      credentials = getCredentialsFromArgs();
-    } else {
-      console.log('📋 Reading credentials from environment variables...');
-      credentials = getCredentialsFromEnv();
-    }
+    const credentials = getCredentialsFromEnv();
 
     // Validate and preview public key format
     try {

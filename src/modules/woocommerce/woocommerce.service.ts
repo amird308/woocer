@@ -4,7 +4,7 @@ import { NotificationsService } from '@common/notifications/notifications.servic
 import WooCommerceRestApi from '@woocommerce/woocommerce-rest-api';
 import { createHash, createHmac } from 'node:crypto';
 import { OrganizationEncryptionManager } from '../../common/utilities/encryption.util';
-import { RawBodyRequest, Request } from '@nestjs/common';
+import { RawBodyRequest } from '@nestjs/common';
 
 export interface WooCommerceConfig {
   organizationId: string;
@@ -97,35 +97,46 @@ export class WooCommerceService {
     }
   }
 
-  async processOrder(organizationId: string, orderData: any, webhookTopic?: string): Promise<void> {
-    this.logger.log(`Processing order ${orderData.id} for organization ${organizationId}`);
-    
+  async processOrder(
+    organizationId: string,
+    orderData: any,
+    webhookTopic?: string,
+  ): Promise<void> {
+    this.logger.log(
+      `Processing order ${orderData.id} for organization ${organizationId}`,
+    );
+
     try {
       // Use webhook topic if provided, otherwise determine from order status
       const topic = webhookTopic || this.getOrderNotificationTopic(orderData);
-      
+
       if (topic) {
         // Send notification to organization members
-        const notificationSent = await this.notificationsService.sendWooCommerceNotification(
-          organizationId,
-          topic,
-          orderData,
-          {
-            data: {
-              type: 'order_update',
-              orderId: orderData.id,
-              orderNumber: orderData.number,
-              status: orderData.status,
-              total: orderData.total,
-              currency: orderData.currency,
+        const notificationSent =
+          await this.notificationsService.sendWooCommerceNotification(
+            organizationId,
+            topic,
+            orderData,
+            {
+              data: {
+                type: 'order_update',
+                orderId: orderData.id,
+                orderNumber: orderData.number,
+                status: orderData.status,
+                total: orderData.total,
+                currency: orderData.currency,
+              },
             },
-          },
-        );
-        
+          );
+
         if (notificationSent) {
-          this.logger.log(`Sent ${topic} notification for order ${orderData.id}`);
+          this.logger.log(
+            `Sent ${topic} notification for order ${orderData.id}`,
+          );
         } else {
-          this.logger.warn(`Failed to send ${topic} notification for order ${orderData.id}`);
+          this.logger.warn(
+            `Failed to send ${topic} notification for order ${orderData.id}`,
+          );
         }
       }
     } catch (error) {
@@ -133,35 +144,47 @@ export class WooCommerceService {
     }
   }
 
-  async processProduct(organizationId: string, productData: any, webhookTopic?: string): Promise<void> {
-    this.logger.log(`Processing product ${productData.id} for organization ${organizationId}`);
-    
+  async processProduct(
+    organizationId: string,
+    productData: any,
+    webhookTopic?: string,
+  ): Promise<void> {
+    this.logger.log(
+      `Processing product ${productData.id} for organization ${organizationId}`,
+    );
+
     try {
       // Use webhook topic if provided, otherwise determine from product data
-      const topic = webhookTopic || this.getProductNotificationTopic(productData);
-      
+      const topic =
+        webhookTopic || this.getProductNotificationTopic(productData);
+
       if (topic) {
         // Send notification to organization members
-        const notificationSent = await this.notificationsService.sendWooCommerceNotification(
-          organizationId,
-          topic,
-          productData,
-          {
-            data: {
-              type: 'product_update',
-              productId: productData.id,
-              productName: productData.name,
-              productSku: productData.sku,
-              productPrice: productData.price,
-              productStatus: productData.status,
+        const notificationSent =
+          await this.notificationsService.sendWooCommerceNotification(
+            organizationId,
+            topic,
+            productData,
+            {
+              data: {
+                type: 'product_update',
+                productId: productData.id,
+                productName: productData.name,
+                productSku: productData.sku,
+                productPrice: productData.price,
+                productStatus: productData.status,
+              },
             },
-          },
-        );
-        
+          );
+
         if (notificationSent) {
-          this.logger.log(`Sent ${topic} notification for product ${productData.id}`);
+          this.logger.log(
+            `Sent ${topic} notification for product ${productData.id}`,
+          );
         } else {
-          this.logger.warn(`Failed to send ${topic} notification for product ${productData.id}`);
+          this.logger.warn(
+            `Failed to send ${topic} notification for product ${productData.id}`,
+          );
         }
       }
     } catch (error) {
@@ -192,7 +215,7 @@ export class WooCommerceService {
    */
   private getOrderNotificationTopic(orderData: any): string | null {
     const status = orderData.status?.toLowerCase();
-    
+
     switch (status) {
       case 'completed':
         return 'order.completed';
@@ -223,13 +246,13 @@ export class WooCommerceService {
     if (productData.date_created && productData.date_modified) {
       const created = new Date(productData.date_created);
       const modified = new Date(productData.date_modified);
-      
+
       // If created and modified are very close (within 1 minute), it's likely a new product
       if (Math.abs(modified.getTime() - created.getTime()) < 60000) {
         return 'product.created';
       }
     }
-    
+
     // Default to updated for existing products
     return 'product.updated';
   }

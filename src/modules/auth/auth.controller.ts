@@ -30,19 +30,20 @@ export class AuthController {
     @Body() body: CreateOrganizationRequestDto,
     @Headers() headers: any,
   ) {
-    if (body.consumerKey || body.consumerSecret) {
-      const processedData =
-        OrganizationEncryptionManager.processOrganizationData({
-          consumerKey: body.consumerKey,
-          consumerSecret: body.consumerSecret,
-        });
-      console.log('processedData', processedData);
-    }
+    const processedData = OrganizationEncryptionManager.processOrganizationData(
+      {
+        consumerKey: body.consumerKey,
+        consumerSecret: body.consumerSecret,
+      },
+    );
+    body.consumerKey = processedData.consumerKey;
+    body.consumerSecret = processedData.consumerSecret;
+    console.log('processedData', processedData);
 
     const organizationData = {
       ...body,
-      consumerKey: JSON.stringify(body.consumerKey),
-      consumerSecret: JSON.stringify(body.consumerSecret),
+      consumerKey: body.consumerKey,
+      consumerSecret: body.consumerSecret,
       slug: body?.slug || generateUniqueSlug(body.name),
     };
 

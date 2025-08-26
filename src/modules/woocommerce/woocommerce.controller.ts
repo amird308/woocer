@@ -5,7 +5,6 @@ import {
   RawBodyRequest,
   Request,
   Logger,
-  BadRequestException,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -17,7 +16,7 @@ import { WooCommerceService } from './woocommerce.service';
 export class WooCommerceController {
   private readonly logger = new Logger(WooCommerceController.name);
 
-  constructor(private readonly wooCommerceService: WooCommerceService) { }
+  constructor(private readonly wooCommerceService: WooCommerceService) {}
 
   @Post('webhooks/order/created')
   @HttpCode(HttpStatus.OK)
@@ -28,7 +27,12 @@ export class WooCommerceController {
     @Headers('x-wc-webhook-signature') signature: string,
     @Headers('x-wc-webhook-id') webhookId: string,
   ): Promise<{ success: boolean }> {
-    return this.wooCommerceService.handleWebhook(req, signature, webhookId, 'order.created');
+    return this.wooCommerceService.handleWebhook(
+      req,
+      signature,
+      webhookId,
+      'order.created',
+    );
   }
 
   @Post('webhooks/order/updated')
@@ -40,7 +44,12 @@ export class WooCommerceController {
     @Headers('x-wc-webhook-signature') signature: string,
     @Headers('x-wc-webhook-id') webhookId: string,
   ): Promise<{ success: boolean }> {
-    return this.wooCommerceService.handleWebhook(req, signature, webhookId, 'order.updated');
+    return this.wooCommerceService.handleWebhook(
+      req,
+      signature,
+      webhookId,
+      'order.updated',
+    );
   }
 
   @Post('webhooks/product/created')
@@ -52,7 +61,12 @@ export class WooCommerceController {
     @Headers('x-wc-webhook-signature') signature: string,
     @Headers('x-wc-webhook-id') webhookId: string,
   ): Promise<{ success: boolean }> {
-    return this.wooCommerceService.handleWebhook(req, signature, webhookId, 'product.created');
+    return this.wooCommerceService.handleWebhook(
+      req,
+      signature,
+      webhookId,
+      'product.created',
+    );
   }
 
   @Post('webhooks/product/updated')
@@ -64,6 +78,11 @@ export class WooCommerceController {
     @Headers('x-wc-webhook-signature') signature: string,
     @Headers('x-wc-webhook-id') webhookId: string,
   ): Promise<{ success: boolean }> {
-    return this.wooCommerceService.handleWebhook(req, signature, webhookId, 'product.updated');
+    return this.wooCommerceService.handleWebhook(
+      req,
+      signature,
+      webhookId,
+      'product.updated',
+    );
   }
 }
