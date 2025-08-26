@@ -41,25 +41,25 @@ export class WooCommerceService {
       {
         name: 'Order Created',
         topic: 'order.created',
-        delivery_url: `${process.env.APP_URL}/api/woocommerce/webhooks/order/created`,
+        delivery_url: `${process.env.APP_URL}/woocommerce/webhooks/order/created`,
         secret: webhookSecret,
       },
       {
         name: 'Order Updated',
         topic: 'order.updated',
-        delivery_url: `${process.env.APP_URL}/api/woocommerce/webhooks/order/updated`,
+        delivery_url: `${process.env.APP_URL}/woocommerce/webhooks/order/updated`,
         secret: webhookSecret,
       },
       {
         name: 'Product Created',
         topic: 'product.created',
-        delivery_url: `${process.env.APP_URL}/api/woocommerce/webhooks/product/created`,
+        delivery_url: `${process.env.APP_URL}/woocommerce/webhooks/product/created`,
         secret: webhookSecret,
       },
       {
         name: 'Product Updated',
         topic: 'product.updated',
-        delivery_url: `${process.env.APP_URL}/api/woocommerce/webhooks/product/updated`,
+        delivery_url: `${process.env.APP_URL}/woocommerce/webhooks/product/updated`,
         secret: webhookSecret,
       },
     ];

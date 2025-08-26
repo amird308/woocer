@@ -23,7 +23,8 @@ export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
   private readonly oneSignalAppId = process.env.ONESIGNAL_APP_ID;
   private readonly oneSignalApiKey = process.env.ONESIGNAL_API_KEY;
-  private readonly oneSignalApiUrl = 'https://onesignal.com/api/v1/notifications';
+  private readonly oneSignalApiUrl =
+    'https://onesignal.com/api/v1/notifications';
 
   constructor(
     private prisma: PrismaService,
@@ -59,39 +60,54 @@ export class NotificationsService {
       if (users.length === 0) {
         this.logger.warn('No users found with valid signal IDs');
         return false;
-      }      
-      const usersByLanguage = users.reduce((acc, user) => {
-        const lang = user.language || 'en';
-        if (!acc[lang]) acc[lang] = [];
-        acc[lang].push(user);
-        return acc;
-      }, {} as Record<string, typeof users>);
+      }
+      const usersByLanguage = users.reduce(
+        (acc, user) => {
+          const lang = user.language || 'en';
+          if (!acc[lang]) acc[lang] = [];
+          acc[lang].push(user);
+          return acc;
+        },
+        {} as Record<string, typeof users>,
+      );
 
       // Send notifications for each language group
-      const promises = Object.entries(usersByLanguage).map(([language, languageUsers]) => {
-        const message = this.messageService.getMessage(messageKey, language, variables);
+      const promises = Object.entries(usersByLanguage).map(
+        ([language, languageUsers]) => {
+          const message = this.messageService.getMessage(
+            messageKey,
+            language,
+            variables,
+          );
 
-        if (!message) {
-          this.logger.warn(`No message found for key: ${messageKey}, language: ${language}`);
-          return Promise.resolve(false);
-        }
+          if (!message) {
+            this.logger.warn(
+              `No message found for key: ${messageKey}, language: ${language}`,
+            );
+            return Promise.resolve(false);
+          }
 
-        const signalIds = languageUsers.map(user => user.signalId).filter(Boolean) as string[];
+          const signalIds = languageUsers
+            .map((user) => user.signalId)
+            .filter(Boolean) as string[];
 
-        return this.sendNotification({
-          app_id: this.oneSignalAppId!,
-          include_player_ids: signalIds,
-          contents: { [language]: message.content },
-          headings: message.heading ? { [language]: message.heading } : undefined,
-          data: { ...options?.data, messageKey, language },
-          url: options?.url,
-          web_url: options?.url,
-          app_url: options?.url,
-        });
-      });
+          return this.sendNotification({
+            app_id: this.oneSignalAppId!,
+            include_player_ids: signalIds,
+            contents: { [language]: message.content },
+            headings: message.heading
+              ? { [language]: message.heading }
+              : undefined,
+            data: { ...options?.data, messageKey, language },
+            url: options?.url,
+            web_url: options?.url,
+            app_url: options?.url,
+          });
+        },
+      );
 
       const results = await Promise.all(promises);
-      return results.some(result => result === true);
+      return results.some((result) => result === true);
     } catch (error) {
       this.logger.error('Failed to send notification to users', error);
       return false;
@@ -133,40 +149,62 @@ export class NotificationsService {
       if (members.length === 0) {
         this.logger.warn('No organization members found with valid signal IDs');
         return false;
-      }     
- // Group users by language
-      const usersByLanguage = members.reduce((acc, member) => {
-        const lang = member.user.language || 'en';
-        if (!acc[lang]) acc[lang] = [];
-        acc[lang].push(member.user);
-        return acc;
-      }, {} as Record<string, Array<{ id: string; signalId: string | null; language: string | null }>>);
+      }
+      // Group users by language
+      const usersByLanguage = members.reduce(
+        (acc, member) => {
+          const lang = member.user.language || 'en';
+          if (!acc[lang]) acc[lang] = [];
+          acc[lang].push(member.user);
+          return acc;
+        },
+        {} as Record<
+          string,
+          Array<{
+            id: string;
+            signalId: string | null;
+            language: string | null;
+          }>
+        >,
+      );
 
       // Send notifications for each language group
-      const promises = Object.entries(usersByLanguage).map(([language, languageUsers]) => {
-        const message = this.messageService.getMessage(messageKey, language, variables);
+      const promises = Object.entries(usersByLanguage).map(
+        ([language, languageUsers]) => {
+          const message = this.messageService.getMessage(
+            messageKey,
+            language,
+            variables,
+          );
 
-        if (!message) {
-          this.logger.warn(`No message found for key: ${messageKey}, language: ${language}`);
-          return Promise.resolve(false);
-        }
+          if (!message) {
+            this.logger.warn(
+              `No message found for key: ${messageKey}, language: ${language}`,
+            );
+            return Promise.resolve(false);
+          }
 
-        const signalIds = languageUsers.map(user => user.signalId).filter(Boolean) as string[];
+          const signalIds = languageUsers
+            .map((user) => user.signalId)
+            .filter(Boolean) as string[];
 
-        return this.sendNotification({
-          app_id: this.oneSignalAppId!,
-          include_player_ids: signalIds,
-          contents: { [language]: message.content },
-          headings: message.heading ? { [language]: message.heading } : undefined,
-          data: { ...options?.data, organizationId, messageKey, language },
-          url: options?.url,
-          web_url: options?.url,
-          app_url: options?.url,
-        });
-      });
+          return this.sendNotification({
+            app_id: this.oneSignalAppId!,
+            include_player_ids: signalIds,
+            contents: { [language]: message.content },
+            headings: message.heading
+              ? { [language]: message.heading }
+              : undefined,
+            data: { ...options?.data, organizationId, messageKey, language },
+            url: options?.url,
+            web_url: options?.url,
+            app_url: options?.url,
+          });
+        },
+      );
 
       const results = await Promise.all(promises);
-      return results.some(result => result === true);
+      return results.some((result) => result === true);
     } catch (error) {
       this.logger.error('Failed to send notification to organization', error);
       return false;
@@ -205,7 +243,10 @@ export class NotificationsService {
   ): Promise<boolean> {
     try {
       // Extract variables from webhook data based on topic
-      const variables = this.extractWooCommerceVariables(webhookTopic, webhookData);
+      const variables = this.extractWooCommerceVariables(
+        webhookTopic,
+        webhookData,
+      );
 
       return await this.sendToOrganization(
         organizationId,
@@ -229,7 +270,10 @@ export class NotificationsService {
   /**
    * Extract variables from WooCommerce webhook data
    */
-  private extractWooCommerceVariables(topic: string, data: any): Record<string, any> {
+  private extractWooCommerceVariables(
+    topic: string,
+    data: any,
+  ): Record<string, any> {
     const variables: Record<string, any> = {};
 
     switch (topic) {
@@ -260,7 +304,8 @@ export class NotificationsService {
 
       case 'customer.created':
         variables.customerId = data.id;
-        variables.customerName = `${data.first_name} ${data.last_name}`.trim() || data.email;
+        variables.customerName =
+          `${data.first_name} ${data.last_name}`.trim() || data.email;
         variables.customerEmail = data.email;
         break;
 
@@ -280,14 +325,20 @@ export class NotificationsService {
     }
 
     return variables;
-  }  /**
+  } /**
   
  * Get available message keys for WooCommerce
    */
   getWooCommerceMessageKeys(): string[] {
-    return this.messageService.getAvailableMessageKeys()
-      .filter(key => key.startsWith('order.') || key.startsWith('product.') ||
-                     key.startsWith('customer.') || key.startsWith('coupon.'));
+    return this.messageService
+      .getAvailableMessageKeys()
+      .filter(
+        (key) =>
+          key.startsWith('order.') ||
+          key.startsWith('product.') ||
+          key.startsWith('customer.') ||
+          key.startsWith('coupon.'),
+      );
   }
 
   /**
