@@ -40,8 +40,8 @@ export class SubscriptionController {
   constructor(private readonly subscriptionService: SubscriptionService) {}
 
   @Post()
-  @RequirePermissions('subscription:create')
-  @ApiOperation({ summary: 'Create a personal subscription' })
+  @RequirePermissions({ subscription: ['create'] })
+  @ApiOperation({ summary: 'Create an individual subscription' })
   @ApiResponse({
     status: HttpStatus.CREATED,
     description: 'Subscription created successfully',
@@ -58,13 +58,13 @@ export class SubscriptionController {
 
     return {
       success: true,
-      message: 'Personal subscription created successfully',
+      message: 'Individual subscription created successfully',
       data: subscription,
     };
   }
 
   @Get('current')
-  @RequirePermissions('subscription:read')
+  @RequirePermissions({ subscription: ['read'] })
   @ApiOperation({
     summary: 'Get current user subscription with credit details',
   })
@@ -83,14 +83,14 @@ export class SubscriptionController {
     return {
       success: true,
       message: subscription
-        ? 'Personal subscription retrieved successfully'
-        : 'No personal subscription found',
+        ? 'Individual subscription retrieved successfully'
+        : 'No subscription found',
       data: subscription,
     };
   }
 
   @Get(':id')
-  @RequirePermissions('subscription:read')
+  @RequirePermissions({ subscription: ['read'] })
   @ApiOperation({ summary: 'Get subscription by ID' })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -110,7 +110,7 @@ export class SubscriptionController {
   }
 
   @Put(':id')
-  @RequirePermissions('subscription:update')
+  @RequirePermissions({ subscription: ['update'] })
   @ApiOperation({ summary: 'Update subscription' })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -134,8 +134,8 @@ export class SubscriptionController {
   }
 
   @Post('consume-credits')
-  @RequirePermissions('subscription:use')
-  @ApiOperation({ summary: 'Consume credits from personal subscription' })
+  @RequirePermissions({ subscription: ['use'] })
+  @ApiOperation({ summary: 'Consume credits from individual subscription' })
   @ApiResponse({
     status: HttpStatus.OK,
     description: 'Credits consumed successfully',
@@ -158,7 +158,7 @@ export class SubscriptionController {
   }
 
   @Get('trial')
-  @RequirePermissions('subscription:read')
+  @RequirePermissions({ subscription: ['read'] })
   @ApiOperation({ summary: 'Get trial subscription status' })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -182,7 +182,7 @@ export class SubscriptionController {
   }
 
   @Post('trial')
-  @RequirePermissions('subscription:create')
+  @RequirePermissions({ subscription: ['create'] })
   @ApiOperation({ summary: 'Create trial subscription' })
   @ApiResponse({
     status: HttpStatus.CREATED,
@@ -204,7 +204,7 @@ export class SubscriptionController {
   }
 
   @Post('trial/convert')
-  @RequirePermissions('subscription:create')
+  @RequirePermissions({ subscription: ['create'] })
   @ApiOperation({ summary: 'Convert trial to paid subscription' })
   @ApiResponse({
     status: HttpStatus.CREATED,
@@ -228,7 +228,7 @@ export class SubscriptionController {
   }
 
   @Post(':id/reset-period-credits')
-  @RequirePermissions('subscription:admin')
+  @RequirePermissions({ subscription: ['admin'] })
   @ApiOperation({ summary: 'Reset period credits (admin only)' })
   @ApiResponse({
     status: HttpStatus.OK,

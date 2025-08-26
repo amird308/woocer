@@ -1,57 +1,33 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {
-  IsEnum,
-  IsString,
-  IsOptional,
-  IsDateString,
-  IsInt,
-  Min,
-} from 'class-validator';
-import {
-  SubscriptionEntity,
-  SubscriptionPlan,
-  SubscriptionStatus,
-} from '../../../common/entities';
+import { IsEnum, IsString, IsOptional, IsInt, Min } from 'class-validator';
+import { SubscriptionPlan, SubscriptionStatus } from '../../../common/entities';
 
-export class CreateSubscriptionRequestDto
-  implements Partial<SubscriptionEntity>
-{
-  @ApiProperty({ description: 'RevenueCat customer ID', required: false })
-  @IsOptional()
-  @IsString()
-  revenueCatCustomerId?: string;
-
+export class CreateSubscriptionRequestDto {
   @ApiProperty({
     enum: SubscriptionPlan,
     description: 'Subscription plan type',
+    example: SubscriptionPlan.AI,
   })
   @IsEnum(SubscriptionPlan)
   plan: SubscriptionPlan;
 
-  @ApiProperty({ enum: SubscriptionStatus, description: 'Subscription status' })
-  @IsEnum(SubscriptionStatus)
-  status: SubscriptionStatus;
-
   @ApiProperty({
-    description: 'Billing period in months (14 days for trial)',
+    description: 'Billing period in months (1, 6, or 12)',
     example: 1,
+    required: false,
   })
+  @IsOptional()
   @IsInt()
   @Min(1)
-  billingPeriod: number;
+  billingPeriod?: number;
 
-  @ApiProperty({ description: 'Current period start date' })
-  @IsDateString()
-  currentPeriodStart: Date;
-
-  @ApiProperty({ description: 'Current period end date' })
-  @IsDateString()
-  currentPeriodEnd: Date;
+  @ApiProperty({ description: 'RevenueCat customer ID', required: false })
+  @IsOptional()
+  @IsString()
+  revenueCatCustomerId?: string;
 }
 
-export class UpdateSubscriptionRequestDto
-  implements Partial<SubscriptionEntity>
-{
+export class UpdateSubscriptionRequestDto {
   @ApiProperty({
     enum: SubscriptionPlan,
     description: 'Subscription plan type',
@@ -70,39 +46,10 @@ export class UpdateSubscriptionRequestDto
   @IsEnum(SubscriptionStatus)
   status?: SubscriptionStatus;
 
-  @ApiProperty({ description: 'Billing period in months', required: false })
+  @ApiProperty({ description: 'RevenueCat customer ID', required: false })
   @IsOptional()
-  @IsInt()
-  @Min(1)
-  billingPeriod?: number;
-
-  @ApiProperty({ description: 'Current period start date', required: false })
-  @IsOptional()
-  @IsDateString()
-  currentPeriodStart?: Date;
-
-  @ApiProperty({ description: 'Current period end date', required: false })
-  @IsOptional()
-  @IsDateString()
-  currentPeriodEnd?: Date;
-
-  @ApiProperty({ description: 'Total credits allocation', required: false })
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  totalCredits?: number;
-
-  @ApiProperty({ description: 'Used credits', required: false })
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  usedCredits?: number;
-
-  @ApiProperty({ description: 'Purchased credits', required: false })
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  purchasedCredits?: number;
+  @IsString()
+  revenueCatCustomerId?: string;
 }
 
 export class ConsumeCreditsRequestDto {

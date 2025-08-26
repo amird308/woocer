@@ -77,6 +77,23 @@ export class SubscriptionWithCreditsResponseDto extends SubscriptionResponseDto 
 
   @ApiProperty({ description: 'Whether user can use AI features' })
   canUseAIFeatures: boolean;
+
+  @ApiProperty({ description: 'Whether this subscription is sponsored' })
+  isSponsored: boolean;
+
+  @ApiProperty({
+    description: 'Sponsorship information if subscription is sponsored',
+    required: false,
+  })
+  sponsorshipInfo?: {
+    id: string;
+    sponsorUserId: string;
+    sponsorUserName: string;
+    organizationId: string;
+    organizationName: string;
+    monthlyCost: number;
+    sponsoredAt: Date;
+  };
 }
 
 export class CreditConsumptionResponseDto {

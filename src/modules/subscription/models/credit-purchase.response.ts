@@ -51,7 +51,7 @@ export class PurchaseHistoryResponseDto {
   hasMore: boolean;
 }
 
-export class TieredPricingPackageDto {
+export class SimpleCreditPackageDto {
   @ApiProperty({ description: 'Package ID' })
   id: string;
 
@@ -70,28 +70,16 @@ export class TieredPricingPackageDto {
   @ApiProperty({ description: 'Price per credit in cents' })
   pricePerCredit: number;
 
-  @ApiProperty({ description: 'Savings percentage compared to base package' })
-  savingsPercentage: number;
-
   @ApiProperty({ description: 'Formatted display price' })
   displayPrice: string;
 
   @ApiProperty({ description: 'Whether this package is recommended' })
   isRecommended: boolean;
-
-  @ApiProperty({
-    enum: ['starter', 'popular', 'best_value'],
-    description: 'Package tier',
-  })
-  tier: 'starter' | 'popular' | 'best_value';
 }
 
-export class TieredPricingResponseDto {
-  @ApiProperty({ type: [TieredPricingPackageDto] })
-  packages: TieredPricingPackageDto[];
-
-  @ApiProperty({ description: 'ID of the recommended package' })
-  recommendedPackageId: string;
+export class CreditPackageListResponseDto {
+  @ApiProperty({ type: [SimpleCreditPackageDto] })
+  packages: SimpleCreditPackageDto[];
 }
 
 export class PurchaseValidationResponseDto {
@@ -120,26 +108,4 @@ export class InitiatePurchaseResponseDto {
 
   @ApiProperty({ description: 'User subscription details' })
   subscription: any;
-}
-
-export class PurchaseAnalyticsResponseDto {
-  @ApiProperty({ description: 'Total number of completed purchases' })
-  totalPurchases: number;
-
-  @ApiProperty({ description: 'Total revenue from purchases in cents' })
-  totalRevenue: number;
-
-  @ApiProperty({ description: 'Total credits sold' })
-  totalCreditssSold: number;
-
-  @ApiProperty({
-    type: [Object],
-    description: 'Top selling packages',
-  })
-  topPackages: Array<{
-    packageId: string;
-    packageName: string;
-    totalPurchases: number;
-    totalRevenue: number;
-  }>;
 }

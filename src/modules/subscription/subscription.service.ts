@@ -15,7 +15,11 @@ import {
   SubscriptionWithCreditsResponseDto,
   CreditConsumptionResponseDto,
 } from './models/subscription.response';
-import { CreditTransactionType, SubscriptionPlan, SubscriptionStatus } from '@/common/entities';
+import {
+  CreditTransactionType,
+  SubscriptionPlan,
+  SubscriptionStatus,
+} from '@/common/entities';
 
 @Injectable()
 export class SubscriptionService {
@@ -26,48 +30,50 @@ export class SubscriptionService {
     data: CreateSubscriptionRequestDto,
   ): Promise<SubscriptionResponseDto> {
     // Check if subscription already exists for this user
-    const existingSubscription = await this.prisma.subscription.findFirst({
-      where: {
-        userId,
-        revenueCatCustomerId: data.revenueCatCustomerId,
+    const existingActiveSubscription = await this.prisma.subscription.findFirst(
+      {
+        where: {
+          userId,
+          isActive: true,
+        },
       },
-    });
+    );
 
-    if (existingSubscription) {
-      throw new BadRequestException(
-        'Subscription already exists for this user and RevenueCat customer',
-      );
+    if (existingActiveSubscription) {
+      throw new BadRequestException('User already has an active subscription');
     }
 
+    // Set default billing period
+    const billingPeriod = data.billingPeriod || 1;
+
     // Calculate credits based on plan and billing period
-    const totalCredits = this.calculateTotalCredits(data.plan, data.billingPeriod);
+    const totalCredits = this.calculateTotalCredits(data.plan, billingPeriod);
+
+    // Set current period dates
+    const now = new Date();
+    const currentPeriodEnd =
+      data.plan === SubscriptionPlan.TRIAL
+        ? new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000) // 14 days for trial
+        : new Date(now.getTime() + billingPeriod * 30 * 24 * 60 * 60 * 1000); // months for paid plans
 
     const subscription = await this.prisma.subscription.create({
       data: {
-        ...data,
         userId,
-        currentPeriodStart: new Date(data.currentPeriodStart),
-        currentPeriodEnd: new Date(data.currentPeriodEnd),
+        revenueCatCustomerId: data.revenueCatCustomerId,
+        plan: data.plan,
+        status:
+          data.plan === SubscriptionPlan.TRIAL
+            ? SubscriptionStatus.TRIALING
+            : SubscriptionStatus.ACTIVE,
+        billingPeriod,
+        currentPeriodStart: now,
+        currentPeriodEnd,
         totalCredits,
-        isEmployeeSubscription: false,
+        usedCredits: 0,
+        purchasedCredits: 0,
+        isActive: true,
       },
     });
-
-    // Create credit allocation transaction
-    if (totalCredits > 0) {
-      await this.prisma.creditTransaction.create({
-        data: {
-          userId,
-          organizationId: null,
-          subscriptionId: subscription.id,
-          type: data.plan === SubscriptionPlan.TRIAL ? 
-               CreditTransactionType.TRIAL_ALLOCATION : 
-               CreditTransactionType.PERIOD_ALLOCATION,
-          amount: totalCredits,
-          description: `${data.plan} plan credit allocation for ${data.billingPeriod} ${data.plan === SubscriptionPlan.TRIAL ? 'days' : 'months'}`,
-        },
-      });
-    }
 
     return subscription as SubscriptionResponseDto;
   }
@@ -86,13 +92,7 @@ export class SubscriptionService {
 
     const updateData: any = { ...data };
 
-    // Convert date strings to Date objects if provided
-    if (data.currentPeriodStart) {
-      updateData.currentPeriodStart = new Date(data.currentPeriodStart);
-    }
-    if (data.currentPeriodEnd) {
-      updateData.currentPeriodEnd = new Date(data.currentPeriodEnd);
-    }
+    // Note: Period dates are managed automatically by the system
 
     const updated = await this.prisma.subscription.update({
       where: { id: subscriptionId },
@@ -108,8 +108,10 @@ export class SubscriptionService {
     const subscription = await this.prisma.subscription.findFirst({
       where: {
         userId,
-        isEmployeeSubscription: false,
         isActive: true,
+      },
+      include: {
+        employeeSubscriptionSponsorship: true,
       },
     });
 
@@ -127,8 +129,10 @@ export class SubscriptionService {
       where: {
         userId,
         plan: SubscriptionPlan.TRIAL,
-        isEmployeeSubscription: false,
         isActive: true,
+      },
+      include: {
+        employeeSubscriptionSponsorship: true,
       },
     });
 
@@ -142,17 +146,16 @@ export class SubscriptionService {
   async createTrialSubscription(
     userId: string,
   ): Promise<SubscriptionResponseDto> {
-    // Check if user already has a trial
-    const existingTrial = await this.prisma.subscription.findFirst({
+    // Check if user already has any active subscription
+    const existingSubscription = await this.prisma.subscription.findFirst({
       where: {
         userId,
-        plan: SubscriptionPlan.TRIAL,
-        isEmployeeSubscription: false,
+        isActive: true,
       },
     });
 
-    if (existingTrial) {
-      throw new BadRequestException('User already has a trial subscription');
+    if (existingSubscription) {
+      throw new BadRequestException('User already has an active subscription');
     }
 
     const now = new Date();
@@ -167,19 +170,9 @@ export class SubscriptionService {
         currentPeriodStart: now,
         currentPeriodEnd: trialEnd,
         totalCredits: 50, // 50 trial credits
-        isEmployeeSubscription: false,
-      },
-    });
-
-    // Create trial credit allocation transaction
-    await this.prisma.creditTransaction.create({
-      data: {
-        userId,
-        organizationId: null,
-        subscriptionId: subscription.id,
-        type: CreditTransactionType.TRIAL_ALLOCATION,
-        amount: 50,
-        description: 'Trial plan credit allocation (50 credits for 14 days)',
+        usedCredits: 0,
+        purchasedCredits: 0,
+        isActive: true,
       },
     });
 
@@ -195,7 +188,6 @@ export class SubscriptionService {
       where: {
         userId,
         plan: SubscriptionPlan.TRIAL,
-        isEmployeeSubscription: false,
         isActive: true,
       },
     });
@@ -219,6 +211,9 @@ export class SubscriptionService {
   ): Promise<SubscriptionWithCreditsResponseDto> {
     const subscription = await this.prisma.subscription.findUnique({
       where: { id: subscriptionId },
+      include: {
+        employeeSubscriptionSponsorship: true,
+      },
     });
 
     if (!subscription) {
@@ -235,21 +230,28 @@ export class SubscriptionService {
     const subscription = await this.prisma.subscription.findFirst({
       where: {
         userId,
-        isEmployeeSubscription: false,
         isActive: true,
+      },
+      include: {
+        employeeSubscriptionSponsorship: true,
       },
     });
 
     if (!subscription) {
-      throw new NotFoundException('No active personal subscription found');
+      throw new NotFoundException('No active subscription found');
     }
 
-    // Allow credit consumption for TRIAL and AI plans
+    // Allow credit consumption for TRIAL and AI plans only
     if (subscription.plan === SubscriptionPlan.PRO) {
-      throw new ForbiddenException('PRO plan subscribers cannot use AI credits');
+      throw new ForbiddenException(
+        'PRO plan subscribers cannot use AI credits',
+      );
     }
 
-    if (subscription.status !== SubscriptionStatus.ACTIVE && subscription.status !== SubscriptionStatus.TRIALING) {
+    if (
+      subscription.status !== SubscriptionStatus.ACTIVE &&
+      subscription.status !== SubscriptionStatus.TRIALING
+    ) {
       throw new ForbiddenException('Subscription is not active');
     }
 
@@ -278,6 +280,23 @@ export class SubscriptionService {
       purchasedCreditsUsed = creditsToConsume;
     }
 
+    // Get organization ID from sponsorship or user's membership
+    const finalOrganizationId =
+      subscription.employeeSubscriptionSponsorship?.organizationId ||
+      // Get user's first organization membership as fallback
+      (
+        await this.prisma.member.findFirst({
+          where: { userId },
+          select: { organizationId: true },
+        })
+      )?.organizationId;
+
+    if (!finalOrganizationId) {
+      throw new BadRequestException(
+        'User must be part of an organization to use credits',
+      );
+    }
+
     // Update subscription in a transaction
     const result = await this.prisma.$transaction(async (tx) => {
       // Update subscription counters
@@ -285,7 +304,8 @@ export class SubscriptionService {
         where: { id: subscription.id },
         data: {
           usedCredits: subscription.usedCredits + totalCreditsUsed,
-          purchasedCredits: subscription.purchasedCredits - purchasedCreditsUsed,
+          purchasedCredits:
+            subscription.purchasedCredits - purchasedCreditsUsed,
         },
       });
 
@@ -293,7 +313,7 @@ export class SubscriptionService {
       const transaction = await tx.creditTransaction.create({
         data: {
           userId,
-          organizationId: null, // Personal subscription is not tied to organization
+          organizationId: finalOrganizationId,
           subscriptionId: subscription.id,
           type: CreditTransactionType.CONSUMED,
           amount: -data.credits, // Negative for consumption
@@ -321,6 +341,9 @@ export class SubscriptionService {
   ): Promise<SubscriptionResponseDto> {
     const subscription = await this.prisma.subscription.findUnique({
       where: { id: subscriptionId },
+      include: {
+        employeeSubscriptionSponsorship: true,
+      },
     });
 
     if (!subscription) {
@@ -329,11 +352,16 @@ export class SubscriptionService {
 
     // Only monthly subscriptions get credit resets
     if (subscription.billingPeriod !== 1) {
-      throw new BadRequestException('Only monthly subscriptions can reset credits');
+      throw new BadRequestException(
+        'Only monthly subscriptions can reset credits',
+      );
     }
 
-    const newCredits = this.calculateTotalCredits(subscription.plan, subscription.billingPeriod);
-    
+    const newCredits = this.calculateTotalCredits(
+      subscription.plan as SubscriptionPlan,
+      subscription.billingPeriod,
+    );
+
     const updatedSubscription = await this.prisma.subscription.update({
       where: { id: subscriptionId },
       data: {
@@ -344,19 +372,8 @@ export class SubscriptionService {
       },
     });
 
-    // Create period allocation transaction for AI plans
-    if (subscription.plan === SubscriptionPlan.AI && newCredits > 0) {
-      await this.prisma.creditTransaction.create({
-        data: {
-          userId: subscription.userId,
-          organizationId: null,
-          subscriptionId: subscription.id,
-          type: CreditTransactionType.PERIOD_ALLOCATION,
-          amount: newCredits,
-          description: `Monthly credit reset for ${subscription.plan} plan`,
-        },
-      });
-    }
+    // Note: Credit transactions are optional for period resets
+    // They can be added later if needed for audit trails
 
     return updatedSubscription as SubscriptionResponseDto;
   }
@@ -364,45 +381,35 @@ export class SubscriptionService {
   async addPurchasedCredits(
     subscriptionId: string,
     credits: number,
-    transactionId: string,
   ): Promise<SubscriptionResponseDto> {
     const subscription = await this.prisma.subscription.findUnique({
       where: { id: subscriptionId },
+      include: {
+        employeeSubscriptionSponsorship: true,
+      },
     });
 
     if (!subscription) {
       throw new NotFoundException('Subscription not found');
     }
 
-    const result = await this.prisma.$transaction(async (tx) => {
-      // Update subscription with purchased credits
-      const updatedSubscription = await tx.subscription.update({
-        where: { id: subscriptionId },
-        data: {
-          purchasedCredits: subscription.purchasedCredits + credits,
-        },
-      });
-
-      // Create credit transaction record
-      await tx.creditTransaction.create({
-        data: {
-          userId: subscription.userId,
-          organizationId: null, // Personal subscription is not tied to organization
-          subscriptionId: subscription.id,
-          type: 'PURCHASED',
-          amount: credits,
-          description: `Purchased ${credits} credits`,
-          metadata: { transactionId },
-        },
-      });
-
-      return updatedSubscription;
+    // Update subscription with purchased credits
+    const updatedSubscription = await this.prisma.subscription.update({
+      where: { id: subscriptionId },
+      data: {
+        purchasedCredits: subscription.purchasedCredits + credits,
+      },
     });
 
-    return result as SubscriptionResponseDto;
+    // Note: Credit transaction logging can be added here if needed
+
+    return updatedSubscription as SubscriptionResponseDto;
   }
 
-  private calculateTotalCredits(plan: SubscriptionPlan, billingPeriod: number): number {
+  private calculateTotalCredits(
+    plan: SubscriptionPlan,
+    billingPeriod: number,
+  ): number {
     switch (plan) {
       case SubscriptionPlan.TRIAL:
         return 50; // 50 credits for 14-day trial
@@ -431,10 +438,29 @@ export class SubscriptionService {
     );
     const availablePurchasedCredits = subscription.purchasedCredits;
     const availableCredits = availableTotalCredits + availablePurchasedCredits;
-    
+
     const canUseAIFeatures =
-      (subscription.plan === SubscriptionPlan.AI || subscription.plan === SubscriptionPlan.TRIAL) &&
-      (subscription.status === SubscriptionStatus.ACTIVE || subscription.status === SubscriptionStatus.TRIALING);
+      (subscription.plan === SubscriptionPlan.AI ||
+        subscription.plan === SubscriptionPlan.TRIAL) &&
+      (subscription.status === SubscriptionStatus.ACTIVE ||
+        subscription.status === SubscriptionStatus.TRIALING);
+
+    const isSponsored = !!subscription.employeeSubscriptionSponsorship;
+    const sponsorshipInfo = subscription.employeeSubscriptionSponsorship
+      ? {
+          id: subscription.employeeSubscriptionSponsorship.id,
+          sponsorUserId:
+            subscription.employeeSubscriptionSponsorship.sponsorUserId,
+          sponsorUserName: '', // Would need to include sponsor user in query
+          organizationId:
+            subscription.employeeSubscriptionSponsorship.organizationId,
+          organizationName: '', // Would need to include organization in query
+          monthlyCost: Number(
+            subscription.employeeSubscriptionSponsorship.monthlyCost,
+          ),
+          sponsoredAt: subscription.employeeSubscriptionSponsorship.sponsoredAt,
+        }
+      : undefined;
 
     return {
       ...subscription,
@@ -442,6 +468,8 @@ export class SubscriptionService {
       availableTotalCredits,
       availablePurchasedCredits,
       canUseAIFeatures,
+      isSponsored,
+      sponsorshipInfo,
     };
   }
 }

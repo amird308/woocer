@@ -103,36 +103,19 @@ export class WebhookService {
     // Find user by RevenueCat app_user_id (should be our user ID)
     const user = await this.prisma.user.findUnique({
       where: { id: event.app_user_id },
-      include: {
-        members: {
-          include: { organization: true },
-        },
-      },
     });
 
     if (!user) {
       throw new NotFoundException(`User not found: ${event.app_user_id}`);
     }
-
-    // For now, use the first organization the user is a member of
-    const organization = user.members[0]?.organization;
-    if (!organization) {
-      throw new NotFoundException(
-        `No organization found for user: ${event.app_user_id}`,
-      );
-    }
-
     // Determine subscription plan based on product ID
     const plan = this.getSubscriptionPlanFromProductId(event.product_id);
-    const monthlyCredits = plan === SubscriptionPlan.AI ? 100 : 0; // Default 100 credits for AI plan
 
     // Create or update subscription
-    const existingSubscription = await this.prisma.subscription.findUnique({
+    const existingSubscription = await this.prisma.subscription.findFirst({
       where: {
-        userId_organizationId: {
-          userId: user.id,
-          organizationId: organization.id,
-        },
+        userId: user.id,
+        isActive: true,
       },
     });
 
@@ -143,31 +126,15 @@ export class WebhookService {
         {
           plan,
           status: SubscriptionStatus.ACTIVE,
-          currentPeriodStart: new Date(event.event_timestamp_ms),
-          currentPeriodEnd: new Date(
-            event.expiration_at_ms ||
-              event.event_timestamp_ms + 30 * 24 * 60 * 60 * 1000,
-          ),
-          monthlyCredits,
+          revenueCatCustomerId: event.original_app_user_id,
         },
       );
     } else {
       // Create new subscription
-      await this.subscriptionService.createSubscription(
-        user.id,
-        organization.id,
-        {
-          revenueCatCustomerId: event.original_app_user_id,
-          plan,
-          status: SubscriptionStatus.ACTIVE,
-          currentPeriodStart: new Date(event.event_timestamp_ms),
-          currentPeriodEnd: new Date(
-            event.expiration_at_ms ||
-              event.event_timestamp_ms + 30 * 24 * 60 * 60 * 1000,
-          ),
-          monthlyCredits,
-        },
-      );
+      await this.subscriptionService.createSubscription(user.id, {
+        revenueCatCustomerId: event.original_app_user_id,
+        plan,
+      });
     }
 
     this.logger.log(
@@ -192,8 +159,8 @@ export class WebhookService {
       );
     }
 
-    // Reset monthly credits
-    await this.subscriptionService.resetMonthlyCredits(subscription.id);
+    // Reset period credits
+    await this.subscriptionService.resetPeriodCredits(subscription.id);
 
     this.logger.log(
       `Subscription renewed for customer ${event.original_app_user_id}`,
@@ -287,7 +254,6 @@ export class WebhookService {
       event.transaction_id,
       creditPackage.id,
       subscription.userId,
-      subscription.organizationId,
     );
 
     this.logger.log(
