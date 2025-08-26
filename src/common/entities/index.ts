@@ -9,7 +9,8 @@ export * from './invitation.entity';
 export * from './team.entity';
 export * from './roles.enum';
 export * from './subscription.entity';
-export * from './employee-subscription.entity';
+export * from './employee-subscription-sponsorship.entity';
+export * from './sponsorship-billing.entity';
 
 export * from './credit-package.entity';
 export * from './credit-transaction.entity';

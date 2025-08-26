@@ -8,13 +8,10 @@ import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../prisma/prisma.service';
 import { SubscriptionPlan, SubscriptionStatus } from '../entities';
 
-export const REQUIRE_AI_PLAN_KEY = 'requireAIPlan';
-
 /**
  * Decorator to require AI plan subscription for route access
  */
-export const RequireAIPlan = () =>
-  Reflector.createDecorator<boolean>({ key: REQUIRE_AI_PLAN_KEY, value: true });
+export const RequireAIPlan = Reflector.createDecorator<boolean>();
 
 @Injectable()
 export class AIPlanGuard implements CanActivate {
@@ -25,7 +22,7 @@ export class AIPlanGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const requireAIPlan = this.reflector.getAllAndOverride<boolean>(
-      REQUIRE_AI_PLAN_KEY,
+      RequireAIPlan,
       [context.getHandler(), context.getClass()],
     );
 
@@ -45,13 +42,10 @@ export class AIPlanGuard implements CanActivate {
       throw new ForbiddenException('Organization context required');
     }
 
-    // Get user's subscription for the current organization
-    const subscription = await this.prisma.subscription.findUnique({
+    // Get user's subscription
+    const subscription = await this.prisma.subscription.findFirst({
       where: {
-        userId_organizationId: {
-          userId: user.id,
-          organizationId,
-        },
+        userId: user.id,
       },
     });
 
@@ -83,4 +77,3 @@ export class AIPlanGuard implements CanActivate {
     return true;
   }
 }
-

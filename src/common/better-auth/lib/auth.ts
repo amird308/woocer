@@ -56,6 +56,21 @@ export const auth = betterAuth({
     enabled: true,
     autoSignIn: true,
   },
+  user: {
+    additionalFields: {
+      signalId: {
+        type: 'string',
+        input: true,
+        required: true,
+      },
+      language: {
+        type: 'string',
+        input: true,
+        required: true,
+        defaultValue: 'en',
+      },
+    },
+  },
 
   databaseHooks: {},
   plugins: [
@@ -63,7 +78,7 @@ export const auth = betterAuth({
     emailOTP({
       async sendVerificationOTP({ email, otp, type }) {
         try {
-          if(type === "email-verification" || type === "sign-in") {
+          if (type === 'email-verification' || type === 'sign-in') {
             const configService = new ConfigService();
             const emailService = new EmailService(configService);
             await emailService.sendOTPEmail(email, otp, type);
@@ -104,8 +119,14 @@ export const auth = betterAuth({
 
             const prismaService = new PrismaService();
             const messageService = new MessageService();
-            const notificationsService = new NotificationsService(prismaService, messageService);
-            const wooCommerceService = new WooCommerceService(prismaService, notificationsService);
+            const notificationsService = new NotificationsService(
+              prismaService,
+              messageService,
+            );
+            const wooCommerceService = new WooCommerceService(
+              prismaService,
+              notificationsService,
+            );
 
             // Setup WooCommerce integration for the new organization
             await wooCommerceService.handleOrganizationCreated(
@@ -124,14 +145,17 @@ export const auth = betterAuth({
         try {
           const configService = new ConfigService();
           const emailService = new EmailService(configService);
-          const baseUrl = process.env.BETTER_AUTH_URL || process.env.APP_URL || 'http://localhost:3000';
+          const baseUrl =
+            process.env.BETTER_AUTH_URL ||
+            process.env.APP_URL ||
+            'http://localhost:3000';
           const inviteLink = `${baseUrl}/accept-invitation/${data.id}`;
 
           await emailService.sendInvitationEmail(
             data.email,
             data.organization.name,
             inviteLink,
-            data.inviter?.user.name
+            data.inviter?.user.name,
           );
 
           console.log(
@@ -164,21 +188,6 @@ export const auth = betterAuth({
               type: 'string',
               input: true,
               required: true,
-            },
-          },
-        },
-        user: {
-          additionalFields: {
-            signalId: {
-              type: 'string',
-              input: true,
-              required: false,
-            },
-            language: {
-              type: 'string',
-              input: true,
-              required: false,
-              defaultValue: 'en',
             },
           },
         },

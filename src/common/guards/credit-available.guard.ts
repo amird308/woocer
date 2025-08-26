@@ -9,17 +9,12 @@ import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../prisma/prisma.service';
 import { SubscriptionPlan, SubscriptionStatus } from '../entities';
 
-export const REQUIRE_CREDITS_KEY = 'requireCredits';
-
 /**
  * Decorator to require available credits for route access
  * @param minCredits Minimum credits required (default: 1)
  */
-export const RequireCredits = (minCredits: number = 1) =>
-  Reflector.createDecorator<number>({
-    key: REQUIRE_CREDITS_KEY,
-    value: minCredits,
-  });
+
+export const RequireCredits = Reflector.createDecorator<number>();
 
 @Injectable()
 export class CreditAvailableGuard implements CanActivate {
@@ -30,7 +25,7 @@ export class CreditAvailableGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const requiredCredits = this.reflector.getAllAndOverride<number>(
-      REQUIRE_CREDITS_KEY,
+      RequireCredits,
       [context.getHandler(), context.getClass()],
     );
 
@@ -50,13 +45,11 @@ export class CreditAvailableGuard implements CanActivate {
       throw new ForbiddenException('Organization context required');
     }
 
-    // Get user's subscription for the current organization
-    const subscription = await this.prisma.subscription.findUnique({
+    // Get user's active subscription
+    const subscription = await this.prisma.subscription.findFirst({
       where: {
-        userId_organizationId: {
-          userId: user.id,
-          organizationId,
-        },
+        userId: user.id,
+        isActive: true,
       },
     });
 
@@ -81,7 +74,7 @@ export class CreditAvailableGuard implements CanActivate {
     // Calculate available credits
     const availableMonthlyCredits = Math.max(
       0,
-      subscription.monthlyCredits - subscription.usedMonthlyCredits,
+      subscription.totalCredits - subscription.usedCredits,
     );
     const availablePurchasedCredits = subscription.purchasedCredits;
     const totalAvailableCredits =
