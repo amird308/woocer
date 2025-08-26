@@ -23,22 +23,6 @@ export interface PurchaseValidationResponse {
   subscription?: any;
 }
 
-export interface TieredPricingResponse {
-  packages: Array<{
-    id: string;
-    name: string;
-    credits: number;
-    price: number;
-    currency: string;
-    pricePerCredit: number;
-    savingsPercentage: number;
-    displayPrice: string;
-    isRecommended: boolean;
-    tier: 'starter' | 'popular' | 'best_value';
-  }>;
-  recommendedPackageId: string;
-}
-
 @Injectable()
 export class CreditPurchaseService {
   constructor(
@@ -48,9 +32,9 @@ export class CreditPurchaseService {
   ) {}
 
   /**
-   * Get tiered pricing with recommendations
+   * Get credit packages
    */
-  async getTieredPricing(): Promise<TieredPricingResponse> {
+  async getCreditPackages(): Promise<{ packages: any[] }> {
     const packages =
       await this.creditPackageService.getAllActiveCreditPackages();
 
@@ -61,55 +45,27 @@ export class CreditPurchaseService {
     // Sort packages by credits (ascending)
     const sortedPackages = packages.sort((a, b) => a.credits - b.credits);
 
-    // Calculate tiers and recommendations
-    const tieredPackages = sortedPackages.map((pkg, index) => {
-      let tier: 'starter' | 'popular' | 'best_value' = 'starter';
-      let isRecommended = false;
+    // Determine which package is recommended (middle one if 3+, larger if 2, only if 1)
+    const recommendedIndex =
+      sortedPackages.length === 1
+        ? 0
+        : sortedPackages.length === 2
+          ? 1
+          : Math.floor(sortedPackages.length / 2);
 
-      if (sortedPackages.length === 1) {
-        tier = 'popular';
-        isRecommended = true;
-      } else if (sortedPackages.length === 2) {
-        tier = index === 0 ? 'starter' : 'best_value';
-        isRecommended = index === 1; // Recommend the larger package
-      } else {
-        // For 3+ packages
-        if (index === 0) {
-          tier = 'starter';
-        } else if (index === Math.floor(sortedPackages.length / 2)) {
-          tier = 'popular';
-          isRecommended = true; // Recommend the middle package
-        } else if (index === sortedPackages.length - 1) {
-          tier = 'best_value';
-        } else {
-          tier =
-            index < Math.floor(sortedPackages.length / 2)
-              ? 'starter'
-              : 'best_value';
-        }
-      }
-
-      return {
-        id: pkg.id,
-        name: pkg.name,
-        credits: pkg.credits,
-        price: pkg.price,
-        currency: pkg.currency,
-        pricePerCredit: pkg.pricePerCredit,
-        savingsPercentage: pkg.savingsPercentage || 0,
-        displayPrice: pkg.displayPrice,
-        isRecommended,
-        tier,
-      };
-    });
-
-    // Find the recommended package ID
-    const recommendedPackage = tieredPackages.find((pkg) => pkg.isRecommended);
-    const recommendedPackageId = recommendedPackage?.id || sortedPackages[0].id;
+    const enrichedPackages = sortedPackages.map((pkg, index) => ({
+      id: pkg.id,
+      name: pkg.name,
+      credits: pkg.credits,
+      price: pkg.price,
+      currency: pkg.currency,
+      pricePerCredit: pkg.pricePerCredit,
+      displayPrice: pkg.displayPrice,
+      isRecommended: index === recommendedIndex,
+    }));
 
     return {
-      packages: tieredPackages,
-      recommendedPackageId,
+      packages: enrichedPackages,
     };
   }
 
@@ -118,15 +74,11 @@ export class CreditPurchaseService {
    */
   async validatePurchase(
     userId: string,
-    organizationId: string,
     creditPackageId: string,
   ): Promise<PurchaseValidationResponse> {
     // Get user's subscription
     const subscription =
-      await this.subscriptionService.getSubscriptionByUserAndOrganization(
-        userId,
-        organizationId,
-      );
+      await this.subscriptionService.getSubscriptionByUser(userId);
 
     if (!subscription) {
       return {
@@ -185,7 +137,6 @@ export class CreditPurchaseService {
    */
   async initiatePurchase(
     userId: string,
-    organizationId: string,
     request: InitiatePurchaseRequest,
   ): Promise<{
     purchaseToken: string;
@@ -195,12 +146,27 @@ export class CreditPurchaseService {
     // Validate purchase
     const validation = await this.validatePurchase(
       userId,
-      organizationId,
       request.creditPackageId,
     );
 
     if (!validation.canPurchase) {
       throw new BadRequestException(validation.reason);
+    }
+
+    // Get organization ID for the purchase record
+    const organizationId =
+      validation.subscription!.sponsorshipInfo?.organizationId ||
+      (
+        await this.prisma.member.findFirst({
+          where: { userId },
+          select: { organizationId: true },
+        })
+      )?.organizationId;
+
+    if (!organizationId) {
+      throw new BadRequestException(
+        'User must be part of an organization to purchase credits',
+      );
     }
 
     // Create a pending purchase record
@@ -236,7 +202,6 @@ export class CreditPurchaseService {
     revenueCatTransactionId: string,
     creditPackageId: string,
     userId: string,
-    organizationId: string,
   ): Promise<void> {
     // Find the credit package
     const creditPackage =
@@ -244,10 +209,7 @@ export class CreditPurchaseService {
 
     // Get user's subscription
     const subscription =
-      await this.subscriptionService.getSubscriptionByUserAndOrganization(
-        userId,
-        organizationId,
-      );
+      await this.subscriptionService.getSubscriptionByUser(userId);
 
     if (!subscription) {
       throw new NotFoundException('Subscription not found');
@@ -272,6 +234,20 @@ export class CreditPurchaseService {
         },
       });
     } else {
+      // Get organization ID
+      const organizationId =
+        subscription.sponsorshipInfo?.organizationId ||
+        (
+          await this.prisma.member.findFirst({
+            where: { userId },
+            select: { organizationId: true },
+          })
+        )?.organizationId;
+
+      if (!organizationId) {
+        throw new BadRequestException('User must be part of an organization');
+      }
+
       // Create new purchase record
       await this.prisma.creditPurchase.create({
         data: {
@@ -293,7 +269,6 @@ export class CreditPurchaseService {
     await this.subscriptionService.addPurchasedCredits(
       subscription.id,
       creditPackage.credits,
-      revenueCatTransactionId,
     );
   }
 
@@ -302,7 +277,6 @@ export class CreditPurchaseService {
    */
   async getPurchaseHistory(
     userId: string,
-    organizationId: string,
     limit: number = 20,
     offset: number = 0,
   ): Promise<{
@@ -314,7 +288,6 @@ export class CreditPurchaseService {
       this.prisma.creditPurchase.findMany({
         where: {
           userId,
-          organizationId,
           status: PurchaseStatus.COMPLETED,
         },
         include: {
@@ -332,7 +305,6 @@ export class CreditPurchaseService {
       this.prisma.creditPurchase.count({
         where: {
           userId,
-          organizationId,
           status: PurchaseStatus.COMPLETED,
         },
       }),
@@ -368,76 +340,5 @@ export class CreditPurchaseService {
       where: { id: purchaseId },
       data: { status: PurchaseStatus.FAILED },
     });
-  }
-
-  /**
-   * Get purchase analytics (admin only)
-   */
-  async getPurchaseAnalytics(
-    startDate?: Date,
-    endDate?: Date,
-  ): Promise<{
-    totalPurchases: number;
-    totalRevenue: number;
-    totalCreditssSold: number;
-    topPackages: Array<{
-      packageId: string;
-      packageName: string;
-      totalPurchases: number;
-      totalRevenue: number;
-    }>;
-  }> {
-    const whereClause: any = {
-      status: PurchaseStatus.COMPLETED,
-    };
-
-    if (startDate && endDate) {
-      whereClause.purchasedAt = {
-        gte: startDate,
-        lte: endDate,
-      };
-    }
-
-    const [totalStats, topPackages] = await Promise.all([
-      this.prisma.creditPurchase.aggregate({
-        where: whereClause,
-        _count: { id: true },
-        _sum: {
-          price: true,
-          credits: true,
-        },
-      }),
-      this.prisma.creditPurchase.groupBy({
-        by: ['creditPackageId'],
-        where: whereClause,
-        _count: { id: true },
-        _sum: { price: true },
-        orderBy: { _count: { id: 'desc' } },
-        take: 10,
-      }),
-    ]);
-
-    // Enrich top packages with package details
-    const enrichedTopPackages = await Promise.all(
-      topPackages.map(async (pkg) => {
-        const packageDetails =
-          await this.creditPackageService.getCreditPackageById(
-            pkg.creditPackageId,
-          );
-        return {
-          packageId: pkg.creditPackageId,
-          packageName: packageDetails.name,
-          totalPurchases: pkg._count.id,
-          totalRevenue: pkg._sum.price || 0,
-        };
-      }),
-    );
-
-    return {
-      totalPurchases: totalStats._count.id || 0,
-      totalRevenue: totalStats._sum.price || 0,
-      totalCreditssSold: totalStats._sum.credits || 0,
-      topPackages: enrichedTopPackages,
-    };
   }
 }

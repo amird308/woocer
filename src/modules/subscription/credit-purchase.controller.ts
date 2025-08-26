@@ -21,11 +21,10 @@ import {
   ValidatePurchaseRequestDto,
 } from './models/credit-purchase.request';
 import {
-  TieredPricingResponseDto,
+  CreditPackageListResponseDto,
   PurchaseValidationResponseDto,
   InitiatePurchaseResponseDto,
   PurchaseHistoryResponseDto,
-  PurchaseAnalyticsResponseDto,
 } from './models/credit-purchase.response';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
@@ -41,26 +40,28 @@ import { ApiResponseDto } from '../../common/types/dto.responce';
 export class CreditPurchaseController {
   constructor(private readonly creditPurchaseService: CreditPurchaseService) {}
 
-  @Get('pricing')
-  @RequirePermissions(['subscription:read'])
-  @ApiOperation({ summary: 'Get tiered credit pricing with recommendations' })
+  @Get('packages')
+  @RequirePermissions({ subscription: ['read'] })
+  @ApiOperation({ summary: 'Get available credit packages' })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: 'Tiered pricing retrieved successfully',
-    type: TieredPricingResponseDto,
+    description: 'Credit packages retrieved successfully',
+    type: CreditPackageListResponseDto,
   })
-  async getTieredPricing(): Promise<ApiResponseDto<TieredPricingResponseDto>> {
-    const pricing = await this.creditPurchaseService.getTieredPricing();
+  async getCreditPackages(): Promise<
+    ApiResponseDto<CreditPackageListResponseDto>
+  > {
+    const packages = await this.creditPurchaseService.getCreditPackages();
 
     return {
       success: true,
-      message: 'Tiered pricing retrieved successfully',
-      data: pricing,
+      message: 'Credit packages retrieved successfully',
+      data: packages,
     };
   }
 
   @Post('validate')
-  @RequirePermissions(['subscription:use'])
+  @RequirePermissions({ subscription: ['use'] })
   @ApiOperation({
     summary: 'Validate if user can purchase specific credit package',
   })
@@ -73,12 +74,8 @@ export class CreditPurchaseController {
     @CurrentUser() user: UserEntity,
     @Body() request: ValidatePurchaseRequestDto,
   ): Promise<ApiResponseDto<PurchaseValidationResponseDto>> {
-    // For now, we'll use the user's first organization
-    const organizationId = user.id; // This is a placeholder - should be actual organization ID
-
     const validation = await this.creditPurchaseService.validatePurchase(
       user.id,
-      organizationId,
       request.creditPackageId,
     );
 
@@ -92,7 +89,7 @@ export class CreditPurchaseController {
   }
 
   @Post('initiate')
-  @RequirePermissions(['subscription:use'])
+  @RequirePermissions({ subscription: ['use'] })
   @ApiOperation({
     summary: 'Initiate credit purchase (prepare for RevenueCat)',
   })
@@ -105,12 +102,8 @@ export class CreditPurchaseController {
     @CurrentUser() user: UserEntity,
     @Body() request: InitiateCreditPurchaseRequestDto,
   ): Promise<ApiResponseDto<InitiatePurchaseResponseDto>> {
-    // For now, we'll use the user's first organization
-    const organizationId = user.id; // This is a placeholder - should be actual organization ID
-
     const result = await this.creditPurchaseService.initiatePurchase(
       user.id,
-      organizationId,
       request,
     );
 
@@ -122,7 +115,7 @@ export class CreditPurchaseController {
   }
 
   @Get('history')
-  @RequirePermissions(['subscription:read'])
+  @RequirePermissions({ subscription: ['read'] })
   @ApiOperation({ summary: 'Get user purchase history' })
   @ApiQuery({
     name: 'limit',
@@ -146,12 +139,8 @@ export class CreditPurchaseController {
     @Query('limit') limit?: number,
     @Query('offset') offset?: number,
   ): Promise<ApiResponseDto<PurchaseHistoryResponseDto>> {
-    // For now, we'll use the user's first organization
-    const organizationId = user.id; // This is a placeholder - should be actual organization ID
-
     const history = await this.creditPurchaseService.getPurchaseHistory(
       user.id,
-      organizationId,
       limit ? parseInt(limit.toString()) : 20,
       offset ? parseInt(offset.toString()) : 0,
     );
@@ -164,7 +153,7 @@ export class CreditPurchaseController {
   }
 
   @Post(':purchaseId/cancel')
-  @RequirePermissions(['subscription:use'])
+  @RequirePermissions({ subscription: ['use'] })
   @ApiOperation({ summary: 'Cancel pending purchase' })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -180,42 +169,6 @@ export class CreditPurchaseController {
       success: true,
       message: 'Purchase cancelled successfully',
       data: null,
-    };
-  }
-
-  @Get('analytics')
-  @RequirePermissions(['subscription:admin'])
-  @ApiOperation({ summary: 'Get purchase analytics (Admin only)' })
-  @ApiQuery({
-    name: 'startDate',
-    required: false,
-    type: String,
-    description: 'Start date (ISO format)',
-  })
-  @ApiQuery({
-    name: 'endDate',
-    required: false,
-    type: String,
-    description: 'End date (ISO format)',
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'Purchase analytics retrieved successfully',
-    type: PurchaseAnalyticsResponseDto,
-  })
-  async getPurchaseAnalytics(
-    @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string,
-  ): Promise<ApiResponseDto<PurchaseAnalyticsResponseDto>> {
-    const analytics = await this.creditPurchaseService.getPurchaseAnalytics(
-      startDate ? new Date(startDate) : undefined,
-      endDate ? new Date(endDate) : undefined,
-    );
-
-    return {
-      success: true,
-      message: 'Purchase analytics retrieved successfully',
-      data: analytics,
     };
   }
 }
