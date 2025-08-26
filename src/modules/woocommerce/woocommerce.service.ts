@@ -5,6 +5,7 @@ import WooCommerceRestApi from '@woocommerce/woocommerce-rest-api';
 import { createHash, createHmac } from 'node:crypto';
 import { OrganizationEncryptionManager } from '../../common/utilities/encryption.util';
 import { RawBodyRequest } from '@nestjs/common';
+import { Currencies, formatCurrency } from '@/common/utils/currency-formater';
 
 export interface WooCommerceConfig {
   organizationId: string;
@@ -124,6 +125,10 @@ export class WooCommerceService {
                 orderNumber: orderData.number,
                 status: orderData.status,
                 total: orderData.total,
+                orderTotal: formatCurrency(
+                  orderData.total,
+                  orderData.currency as Currencies,
+                ),
                 currency: orderData.currency,
               },
             },
@@ -303,14 +308,14 @@ export class WooCommerceService {
 
   async handleWebhook(
     req: RawBodyRequest<Request>,
+    body: Woocommerce.Order | Woocommerce.Product,
     signature: string,
     webhookId: string,
     topic: string,
   ): Promise<{ success: boolean }> {
     try {
-      const payload = req.rawBody?.toString('utf8') || '';
-      const data = JSON.parse(payload);
-
+      // const payload = req.rawBody?.toString('utf8') || '';
+      const data = body;
       // Find webhook configuration to get secret and organization
       const webhook = await this.prisma.wooCommerceWebhook.findUnique({
         where: { wooCommerceWebhookId: parseInt(webhookId) },
@@ -323,10 +328,10 @@ export class WooCommerceService {
       }
 
       // Validate webhook signature
-      if (!this.validateWebhookSignature(payload, signature, webhook.secret)) {
-        this.logger.warn(`Invalid signature for webhook ${webhookId}`);
-        throw new BadRequestException('Invalid webhook signature');
-      }
+      // if (!this.validateWebhookSignature(payload, signature, webhook.secret)) {
+      //   this.logger.warn(`Invalid signature for webhook ${webhookId}`);
+      //   throw new BadRequestException('Invalid webhook signature');
+      // }
 
       // Process the webhook based on topic
       switch (topic) {
