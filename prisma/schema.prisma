@@ -37,6 +37,9 @@ model User {
   // Sponsorship relationships
   sponsoredSubscriptions          EmployeeSubscriptionSponsorship[] @relation("SponsorUser") // Sponsorships they pay for (as organization owner)
   receivedSponsoredSubscriptions  EmployeeSubscriptionSponsorship[] @relation("SponsoredUser") // Sponsorships they receive (as employee)
+  
+  // User-specific organization secrets
+  userSecrets                     UserSecret[]
 }
 
 // Better Auth Session Model
@@ -110,6 +113,7 @@ model Organization {
   creditPurchases        CreditPurchase[]
   creditTransactions     CreditTransaction[]
   employeeSubscriptionSponsorships EmployeeSubscriptionSponsorship[]
+  userSecrets            UserSecret[]
 }
 
 model Member {
@@ -372,4 +376,24 @@ enum CreditTransactionType {
   CONSUMED
   REFUNDED
   EXPIRED
+}
+
+// User-specific encrypted organization secrets
+// Each user gets their own encrypted copy of organization secrets
+model UserSecret {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @db.Uuid
+  organizationId String   @db.Uuid
+  publicKey      String   // User-specific public key for this organization
+  encryptedData  String   // Encrypted organization secrets (consumerKey, consumerSecret, etc.)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Ensure one secret per user per organization
+  @@unique([userId, organizationId])
+  @@index([userId])
+  @@index([organizationId])
 }

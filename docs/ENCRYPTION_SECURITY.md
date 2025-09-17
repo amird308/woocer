@@ -1,163 +1,273 @@
-# Organization Encryption Security System
+# Store Encryption Security System
 
-This document describes the asymmetric encryption security system implemented for protecting sensitive organization data (WooCommerce credentials) in the Woocer backend.
+This document describes the user/store-specific asymmetric encryption security system implemented for protecting sensitive store data (WooCommerce credentials) in the Woocer backend.
 
 ## Overview
 
-The system uses **hybrid encryption** (RSA + AES) to secure sensitive organization fields:
+The system uses **user/store-specific key pairs** to secure sensitive store fields:
 - `consumerKey` - WooCommerce API consumer key
-- `consumerSecret` - WooCommerce API consumer secret 
+- `consumerSecret` - WooCommerce API consumer secret
+- Website URL and other sensitive store information
+
+Each user-store combination has its own unique public/private key pair for maximum security isolation.
 
 ## Security Flow
 
-1. **Client Side**: Sensitive data is encrypted using the server's public key before transmission
-2. **Server Side (beforeCreate)**: 
-   - Incoming encrypted data is decrypted using the server's private key
-   - Data is immediately re-encrypted using the server's storage key pair
-   - Encrypted data is stored in the database
-3. **Runtime**: When accessing organization data, it's decrypted on-demand using the server's private key
+### 1. Store Creation
+
+**Frontend → Backend**
+
+User creates a store and sends:
+- Website URL  
+- Secret keys  
+
+**Backend**
+
+1. Save store information in the database encrypted (for backend access)
+2. Generate a key pair per user-store (public/private)
+3. Encrypt the store's secret keys using the user/store public key
+4. Save encrypted keys and public key in the database
+5. Send the private key to the frontend
+
+**Frontend**
+
+- Store the private key securely (e.g., local storage with strong encryption)
+
+### 2. Fetch Store List
+
+**Frontend → Backend**
+
+- Calls API to fetch the user's stores
+
+**Backend**
+
+- Returns a list of stores, including:
+  - Encrypted store keys
+  - User/store public key
+
+**Frontend**
+
+- Decrypt store keys using the private key + public key
+
+### 3. Login on Another Device
+
+**Flow**
+
+1. Remove all previous user/store public keys and encrypted data on the backend
+2. Generate a new private key for the user
+3. Re-encrypt all store keys with the new public key
+4. Send the new private key to the frontend for storage
 
 ## Architecture Components
 
-### 1. AsymmetricEncryption Class
-- **Purpose**: Core encryption/decryption utilities
+### 1. UserStoreEncryption Class
+- **Purpose**: User/store-specific encryption/decryption utilities
 - **Algorithm**: RSA-2048 for key encryption + AES-256-GCM for data encryption
 - **Location**: `src/common/utilities/encryption.util.ts`
 
-### 2. OrganizationEncryptionManager Class  
-- **Purpose**: High-level organization data processing
+### 2. StoreEncryptionManager Class  
+- **Purpose**: High-level store data processing
 - **Functions**:
-  - `processOrganizationData()` - Decrypt + re-encrypt for storage
-  - `decryptStoredOrganizationData()` - Decrypt for runtime use
+  - `generateUserStoreKeyPair()` - Generate unique key pair per user-store
+  - `encryptStoreData()` - Encrypt store data using user/store public key
+  - `decryptStoreData()` - Decrypt store data using private key
+  - `reEncryptAllStores()` - Re-encrypt all user stores with new key pair
 
-### 3. Better Auth Integration
-- **Hook**: `beforeCreate` in organization creation
-- **Process**: Automatically encrypts sensitive fields before database storage
-- **Location**: `src/common/better-auth/lib/auth.ts`
+### 3. Store Creation Integration
+- **Hook**: Store creation endpoint
+- **Process**: 
+  - Generate unique key pair for user-store combination
+  - Encrypt sensitive store data with public key
+  - Store encrypted data and public key in database
+  - Return private key to frontend
+- **Location**: Store module service and controller
 
-## Setup Instructions
+## Implementation Details
 
-### 1. Generate Encryption Keys
+### 1. Database Schema
 
-```bash
-# Generate RSA key pairs
-npx tsx scripts/generate-encryption-keys.ts
+The store table should include fields for:
+- `encryptedConsumerKey` - Store's consumer key encrypted with user/store public key
+- `encryptedConsumerSecret` - Store's consumer secret encrypted with user/store public key
+- `publicKey` - User/store specific public key for this store
+- `userId` - Reference to the user who owns this store
 
-# Or using npm script (if added to package.json)
-npm run generate:keys
+### 2. Backend API Endpoints
+
+**Create Store Endpoint:**
+```typescript
+POST /stores
+{
+  "name": "My Store",
+  "wooCommerceUrl": "https://mystore.com",
+  "consumerKey": "ck_secret123",
+  "consumerSecret": "cs_secret456"
+}
+
+Response:
+{
+  "storeId": "uuid",
+  "privateKey": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+}
 ```
 
-### 2. Environment Configuration
+**Fetch Stores Endpoint:**
+```typescript
+GET /stores
 
-Add the generated keys to your `.env` files:
-
-**Backend `.env`:**
-```env
-# Server keys (used for server-side encryption/decryption)
-SERVER_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
-SERVER_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+Response:
+{
+  "stores": [
+    {
+      "id": "uuid",
+      "name": "My Store",
+      "wooCommerceUrl": "https://mystore.com",
+      "encryptedConsumerKey": "encrypted_data",
+      "encryptedConsumerSecret": "encrypted_data",
+      "publicKey": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
+    }
+  ]
+}
 ```
 
-**Frontend `.env` (or `.env.local`):**
-```env
-# Frontend needs server's public key to encrypt data before sending
-NEXT_PUBLIC_SERVER_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
-```
+**Login/Device Change Endpoint:**
+```typescript
+POST /auth/regenerate-store-keys
 
-**Note**: The `NEXT_PUBLIC_SERVER_PUBLIC_KEY` should be the **same** as `SERVER_PUBLIC_KEY` - it's just exposed to the frontend with the `NEXT_PUBLIC_` prefix.
+Response:
+{
+  "privateKey": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
+  "message": "All store keys re-encrypted successfully"
+}
+```
 
 ### 3. Frontend Integration
 
 ```javascript
-// Frontend: Encrypt data before sending to server
-import { encryptForServer } from './encryption-utils';
-
-const orgData = {
-  name: "My Store",
-  consumerKey: "ck_secret123",
-  consumerSecret: "cs_secret456", 
-  wooCommerceUrl: "https://mystore.com"
+// Store Creation
+const createStore = async (storeData) => {
+  const response = await fetch('/api/stores', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(storeData)
+  });
+  
+  const { storeId, privateKey } = await response.json();
+  
+  // Store private key securely in local storage
+  localStorage.setItem(`store_private_key_${storeId}`, privateKey);
+  
+  return storeId;
 };
 
-// Get server's public key from environment
-const serverPublicKey = process.env.NEXT_PUBLIC_SERVER_PUBLIC_KEY;
-
-// Encrypt sensitive fields
-const encryptedData = {
-  ...orgData,
-  consumerKey: encryptForServer(orgData.consumerKey, serverPublicKey),
-  consumerSecret: encryptForServer(orgData.consumerSecret, serverPublicKey)
+// Fetch and Decrypt Stores
+const fetchStores = async () => {
+  const response = await fetch('/api/stores');
+  const { stores } = await response.json();
+  
+  // Decrypt each store's data
+  const decryptedStores = stores.map(store => {
+    const privateKey = localStorage.getItem(`store_private_key_${store.id}`);
+    
+    return {
+      ...store,
+      consumerKey: decrypt(store.encryptedConsumerKey, privateKey),
+      consumerSecret: decrypt(store.encryptedConsumerSecret, privateKey)
+    };
+  });
+  
+  return decryptedStores;
 };
 
-// Send to server
-await createOrganization(encryptedData);
+// Handle Login on New Device
+const handleNewDeviceLogin = async () => {
+  const response = await fetch('/api/auth/regenerate-store-keys', {
+    method: 'POST'
+  });
+  
+  const { privateKey } = await response.json();
+  
+  // Clear old keys and store new private key
+  localStorage.clear();
+  localStorage.setItem('user_private_key', privateKey);
+};
 ```
 
 ## Security Benefits
 
-1. **End-to-End Protection**: Data is encrypted in transit and at rest
-2. **Zero-Knowledge Storage**: Server can only decrypt data when explicitly needed
-3. **Key Rotation Support**: Easy to rotate encryption keys without affecting stored data
-4. **Audit Trail**: All encryption/decryption operations are logged
-5. **Defense in Depth**: Multiple layers of encryption (transport + application + database)
+1. **User-Store Isolation**: Each user-store combination has unique encryption keys
+2. **Frontend-Controlled Decryption**: Only the frontend can decrypt store data with private keys
+3. **Device-Specific Security**: New device login requires re-encryption of all store data
+4. **No Server-Side Decryption**: Backend never stores or has access to private keys
+5. **Granular Access Control**: Individual store access can be revoked without affecting others
+6. **Cross-Device Synchronization**: Secure key regeneration for new device access
 
 ## Key Management
 
 ### Security Best Practices
 
-- **Never commit private keys** to version control
-- Store private keys in secure environment variables
-- Use different key pairs for different environments (dev/staging/prod)
-- Implement key rotation policy (recommended: every 6-12 months)
-- Monitor encryption/decryption failures for security incidents
+- **Frontend Key Storage**: Store private keys securely in browser storage with encryption
+- **Key Regeneration**: Automatically regenerate keys when logging in from new devices
+- **User-Store Specific Keys**: Each store has its own unique key pair per user
+- **Secure Key Transmission**: Private keys are only sent once during store creation/device login
+- **Local Key Management**: Frontend is responsible for securely managing private keys
 
-### Key Rotation Process
+### Device Login Process
 
-1. Generate new key pairs using the key generator
-2. Update environment variables with new keys
-3. Existing encrypted data remains accessible with old keys
-4. New data uses new encryption keys
-5. Gradually migrate old data (optional background process)
+1. User logs in from a new device
+2. Backend detects new device login
+3. All existing user/store public keys are invalidated
+4. New key pairs are generated for all user stores
+5. All store data is re-encrypted with new public keys
+6. New private key is sent to frontend for storage
+7. Old encrypted data becomes inaccessible from other devices
 
 ## Error Handling
 
 The system includes comprehensive error handling:
 
-- **Encryption Failures**: Organization creation is aborted if encryption fails
-- **Decryption Failures**: WooCommerce operations gracefully fail with logged errors
-- **Missing Keys**: Clear error messages when encryption keys are not configured
+- **Key Generation Failures**: Store creation is aborted if key pair generation fails
+- **Encryption Failures**: Store data encryption failures are logged and creation is aborted
+- **Missing Private Keys**: Frontend gracefully handles missing private keys during decryption
 - **Invalid Data**: Validation before encryption to prevent corrupted data
+- **Device Login Failures**: Re-encryption process failures are logged and user is notified
 
 ## Performance Considerations
 
-- **Lazy Decryption**: Data is only decrypted when explicitly accessed
-- **Caching**: Consider caching decrypted data for frequently accessed organizations
-- **Batch Operations**: Decrypt multiple organizations efficiently when needed
+- **Frontend Decryption**: Decryption happens on the frontend, reducing server load
+- **Key Caching**: Private keys are cached in frontend storage for performance
+- **Batch Re-encryption**: During device login, all stores are re-encrypted in batch operations
+- **Selective Decryption**: Only decrypt store data when explicitly needed by user
 
 ## Monitoring & Logging
 
 Key events are logged for security monitoring:
 
-- Organization creation with encryption status
-- Encryption/decryption failures
-- Configuration errors (missing keys)
-- Webhook setup with decrypted credentials
+- Store creation with key generation status
+- Key pair generation and encryption operations
+- Device login and re-encryption processes
+- Failed encryption/decryption attempts
+- Private key transmission events
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **"Server encryption keys are not configured"**
-   - Ensure `SERVER_PRIVATE_KEY` and `SERVER_PUBLIC_KEY` are set in environment
-   - Verify keys are properly formatted (newlines as `\n`)
+1. **"Failed to generate key pair for store"**
+   - Check server's ability to generate RSA key pairs
+   - Verify sufficient system resources for key generation
 
-2. **"Failed to decrypt organization data"**
-   - Check if keys match the ones used for encryption
-   - Verify data was properly encrypted before storage
+2. **"Cannot decrypt store data - missing private key"**
+   - Ensure private key is stored in frontend localStorage
+   - Check if user needs to log in from new device to regenerate keys
 
-3. **"Failed to process encrypted organization data"**
-   - Ensure incoming data is properly encrypted with correct public key
-   - Verify client-side encryption implementation
+3. **"Re-encryption failed during device login"**
+   - Verify all user stores are accessible in database
+   - Check for any corrupted encrypted data
+
+4. **"Private key not received from server"**
+   - Check network connectivity during store creation
+   - Verify API response includes private key
 
 ### Debug Mode
 
@@ -167,4 +277,43 @@ Enable debug logging to troubleshoot encryption issues:
 LOG_LEVEL=debug
 ```
 
-This will log detailed encryption/decryption operations for debugging. 
+This will log detailed key generation, encryption/decryption operations, and device login processes for debugging.
+
+## Migration from Previous System
+
+If migrating from the previous server-side encryption system:
+
+1. **Backup existing encrypted data** before migration
+2. **Decrypt existing organization data** using old server keys
+3. **Re-encrypt per user-store** using new key pair system
+4. **Update frontend** to handle private key storage and decryption
+5. **Test thoroughly** before removing old encryption system
+
+### Migration Script
+
+```typescript
+// Example migration script structure
+async function migrateToUserStoreEncryption() {
+  const organizations = await getAllOrganizations();
+  
+  for (const org of organizations) {
+    // Decrypt with old server keys
+    const decryptedData = await decryptWithServerKeys(org);
+    
+    // Generate new user-store key pair
+    const { publicKey, privateKey } = await generateKeyPair();
+    
+    // Re-encrypt with new keys
+    const encryptedData = await encryptWithUserStoreKeys(decryptedData, publicKey);
+    
+    // Update database
+    await updateOrganization(org.id, { 
+      ...encryptedData, 
+      publicKey 
+    });
+    
+    // Notify user to store new private key
+    await notifyUserOfNewPrivateKey(org.userId, privateKey);
+  }
+}
+``` 
