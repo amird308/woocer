@@ -5,7 +5,6 @@ import { PrismaClient } from '@prisma/client';
 import { ac, employee, owner } from './permissions';
 import { EmailService } from '../../services/email.service';
 import { ConfigService } from '@nestjs/config';
-// import { OrganizationEncryptionManager } from '../../utilities/encryption.util';
 
 const prisma = new PrismaClient();
 
@@ -36,8 +35,8 @@ export const auth = betterAuth({
     },
   },
   session: {
-    expiresIn: 60 * 60 * 24 * 7, // 7 days
-    updateAge: 60 * 60 * 24, // 1 day (every 1 day the session expiration is updated)
+    expiresIn: 60 * 60 * 24 * 7,
+    updateAge: 60 * 60 * 24,
   },
   onAPIError: {
     onError: (error) => {
@@ -137,7 +136,6 @@ export const auth = betterAuth({
               'Failed to setup WooCommerce integration for organization:',
               error,
             );
-            // Don't throw error to prevent organization creation failure
           }
         },
       },

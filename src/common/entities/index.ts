@@ -15,3 +15,4 @@ export * from './sponsorship-billing.entity';
 export * from './credit-package.entity';
 export * from './credit-transaction.entity';
 export * from './credit-purchase.entity';
+export * from './user-secret.entity';

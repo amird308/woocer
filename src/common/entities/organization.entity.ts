@@ -8,4 +8,5 @@ export interface OrganizationEntity {
   consumerKey: string;
   consumerSecret: string;
   wooCommerceUrl: string;
+  publicKey?: string; // User/store-specific public key for encryption
 }
