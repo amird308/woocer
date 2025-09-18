@@ -186,6 +186,97 @@ export class AsymmetricEncryption {
   }
 }
 
+export class UserSecretEncryptionManager {
+  /**
+   * Generate a unique key pair for user-organization combination
+   */
+  static generateUserOrganizationKeyPair(): KeyPair {
+    return AsymmetricEncryption.generateKeyPair();
+  }
+
+  /**
+   * Encrypt organization secrets for a specific user
+   */
+  static encryptOrganizationSecrets(
+    secretsData: {
+      consumerKey: string;
+      consumerSecret: string;
+      wooCommerceUrl: string;
+    },
+    publicKey: string,
+  ): string {
+    try {
+      const dataToEncrypt = JSON.stringify(secretsData);
+      const encryptedData = AsymmetricEncryption.encryptData(
+        dataToEncrypt,
+        publicKey,
+      );
+      return JSON.stringify(encryptedData);
+    } catch (error) {
+      console.error('Failed to encrypt organization secrets:', error);
+      throw new Error('Failed to encrypt organization secrets');
+    }
+  }
+
+  /**
+   * Decrypt organization secrets using private key (for frontend use)
+   */
+  static decryptOrganizationSecrets(
+    encryptedData: string,
+    privateKey: string,
+  ): {
+    consumerKey: string;
+    consumerSecret: string;
+    wooCommerceUrl: string;
+  } {
+    try {
+      const encryptedDataObj = JSON.parse(encryptedData) as EncryptedData;
+      const decryptedData = AsymmetricEncryption.decryptData(
+        encryptedDataObj,
+        privateKey,
+      );
+      return JSON.parse(decryptedData);
+    } catch (error) {
+      console.error('Failed to decrypt organization secrets:', error);
+      throw new Error('Failed to decrypt organization secrets');
+    }
+  }
+
+  /**
+   * Create or update user secret for an organization
+   */
+  static createUserSecret(organizationSecrets: {
+    consumerKey: string;
+    consumerSecret: string;
+    wooCommerceUrl: string;
+  }): {
+    publicKey: string;
+    privateKey: string;
+    encryptedData: string;
+  } {
+    try {
+      // Generate unique key pair for this user-organization
+      const keyPair = this.generateUserOrganizationKeyPair();
+
+      // Encrypt organization secrets with public key
+      const encryptedData = this.encryptOrganizationSecrets(
+        organizationSecrets,
+        keyPair.publicKey,
+      );
+
+      return {
+        publicKey: keyPair.publicKey,
+        privateKey: keyPair.privateKey,
+        encryptedData,
+      };
+    } catch (error) {
+      console.error('Failed to create user secret:', error);
+      throw new Error('Failed to create user secret');
+    }
+  }
+}
+
+// Keep the old class for backward compatibility during migration
 export class OrganizationEncryptionManager {
   /**
    * Get server keys dynamically from environment variables

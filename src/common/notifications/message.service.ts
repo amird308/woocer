@@ -1,5 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { WOOCOMMERCE_MESSAGES, GENERAL_MESSAGES, NotificationMessage } from './messages';
+import {
+  WOOCOMMERCE_MESSAGES,
+  GENERAL_MESSAGES,
+  NotificationMessage,
+} from './messages';
 
 @Injectable()
 export class MessageService {
@@ -19,7 +23,7 @@ export class MessageService {
   ): NotificationMessage | null {
     try {
       const messageTemplate = this.messages[messageKey];
-      
+
       if (!messageTemplate) {
         this.logger.warn(`Message template not found for key: ${messageKey}`);
         return null;
@@ -27,16 +31,20 @@ export class MessageService {
 
       // Try to get message in requested language, fallback to English
       const message = messageTemplate[language] || messageTemplate['en'];
-      
+
       if (!message) {
-        this.logger.warn(`Message not found for key: ${messageKey}, language: ${language}`);
+        this.logger.warn(
+          `Message not found for key: ${messageKey}, language: ${language}`,
+        );
         return null;
       }
 
       // Replace variables in content and heading
       const processedMessage: NotificationMessage = {
         content: this.replaceVariables(message.content, variables),
-        heading: message.heading ? this.replaceVariables(message.heading, variables) : undefined,
+        heading: message.heading
+          ? this.replaceVariables(message.heading, variables)
+          : undefined,
       };
 
       return processedMessage;
@@ -44,16 +52,22 @@ export class MessageService {
       this.logger.error(`Error getting message for key: ${messageKey}`, error);
       return null;
     }
-  } 
- /**
+  }
+  /**
    * Replace variables in message text
    */
-  private replaceVariables(text: string, variables: Record<string, any>): string {
+  private replaceVariables(
+    text: string,
+    variables: Record<string, any>,
+  ): string {
     let processedText = text;
-    
+
     Object.entries(variables).forEach(([key, value]) => {
       const placeholder = `{${key}}`;
-      processedText = processedText.replace(new RegExp(placeholder, 'g'), String(value));
+      processedText = processedText.replace(
+        new RegExp(placeholder, 'g'),
+        String(value),
+      );
     });
 
     return processedText;
@@ -94,8 +108,8 @@ export class MessageService {
     }
 
     const result: Record<string, NotificationMessage> = {};
-    
-    Object.keys(messageTemplate).forEach(language => {
+
+    Object.keys(messageTemplate).forEach((language) => {
       const message = this.getMessage(messageKey, language, variables);
       if (message) {
         result[language] = message;
