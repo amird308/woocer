@@ -52,8 +52,7 @@ export const auth = betterAuth({
     // },
   },
   emailAndPassword: {
-    enabled: true,
-    autoSignIn: true,
+    enabled: false,
   },
   user: {
     additionalFields: {
@@ -73,7 +72,9 @@ export const auth = betterAuth({
 
   databaseHooks: {},
   plugins: [
-    openAPI(),
+    openAPI({
+      disableDefaultReference: false,
+    }),
     emailOTP({
       async sendVerificationOTP({ email, otp, type }) {
         try {
