@@ -2,6 +2,7 @@ import {
   All,
   Body,
   Controller,
+  Get,
   Headers,
   Post,
   Req,
@@ -11,39 +12,54 @@ import {
 import { Request, Response } from 'express';
 import { toNodeHandler } from 'better-auth/node';
 import { auth } from '@auth/lib/auth';
-import { ApiBearerAuth, ApiExcludeEndpoint } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiExcludeEndpoint,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 import {
   generateUniqueSlug,
   OrganizationEncryptionManager,
 } from '@/common/utilities';
 import { AuthGuard } from '../../common/guards/auth.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CreateOrganizationRequestDto } from './models/organization.request';
-import { WooCommerceService } from '../woocommerce/woocommerce.service';
+import {
+  GenerateUserSecretsResponseDto,
+  GetUserOrganizationsResponseDto,
+} from './models/user-secret.response';
+import { UserSecretService } from './user-secret.service';
 @Controller()
 export class AuthController {
-  constructor(private readonly wooCommerceService: WooCommerceService) {}
+  constructor(private readonly userSecretService: UserSecretService) {}
 
   @ApiBearerAuth()
   @UseGuards(AuthGuard)
   @Post('api/auth/organization/create')
+  @ApiOperation({
+    summary: 'Create a new store/organization (legacy endpoint)',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Store created successfully',
+  })
   async createOrganization(
     @Body() body: CreateOrganizationRequestDto,
     @Headers() headers: any,
   ) {
+    // Encrypt organization credentials for backend storage
     const processedData = OrganizationEncryptionManager.processOrganizationData(
       {
         consumerKey: body.consumerKey,
         consumerSecret: body.consumerSecret,
       },
     );
-    body.consumerKey = processedData.consumerKey;
-    body.consumerSecret = processedData.consumerSecret;
-    console.log('processedData', processedData);
 
     const organizationData = {
       ...body,
-      consumerKey: body.consumerKey,
-      consumerSecret: body.consumerSecret,
+      consumerKey: processedData.consumerKey,
+      consumerSecret: processedData.consumerSecret,
       slug: body?.slug || generateUniqueSlug(body.name),
     };
 
@@ -52,9 +68,49 @@ export class AuthController {
       headers: headers,
     });
 
-    // await this.wooCommerceService.handleOrganizationCreated(data.id);
+    return {
+      message: 'Organization created successfully',
+      data,
+    };
+  }
 
-    return { message: 'Organization created', data };
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard)
+  @Post('api/auth/user-secrets/generate')
+  @ApiOperation({
+    summary:
+      'Generate or regenerate user-specific encrypted secrets for all organizations',
+    description:
+      'Checks what organizations the user is a member of, creates or recreates user secrets per organization, and returns list with public and private keys.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'User secrets generated successfully',
+    type: GenerateUserSecretsResponseDto,
+  })
+  async generateUserSecrets(
+    @CurrentUser() user: any,
+  ): Promise<GenerateUserSecretsResponseDto> {
+    return this.userSecretService.generateUserSecrets(user.id);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard)
+  @Get('api/auth/user-organizations')
+  @ApiOperation({
+    summary: 'Get user organizations with user-specific public keys',
+    description:
+      'Returns user organizations with their user-specific public keys and encrypted data.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of user organizations with encrypted data',
+    type: GetUserOrganizationsResponseDto,
+  })
+  async getUserOrganizations(
+    @CurrentUser() user: any,
+  ): Promise<GetUserOrganizationsResponseDto> {
+    return this.userSecretService.getUserOrganizations(user.id);
   }
 
   @ApiExcludeEndpoint()

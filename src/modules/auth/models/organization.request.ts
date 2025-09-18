@@ -1,6 +1,5 @@
 import { IsString, IsOptional, IsUrl, IsNotEmpty } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
 
 export class EncryptedData {
   @ApiProperty({
@@ -46,26 +45,22 @@ export class CreateOrganizationRequestDto {
   logo?: string;
 
   @ApiProperty({
-    description: 'WooCommerce consumer key',
-    example: {
-      encryptedData: 'encrypted_data',
-      encryptedSymmetricKey: 'encrypted_symmetric_key',
-    },
+    description:
+      'WooCommerce consumer key (plain text - will be encrypted server-side)',
+    example: 'ck_secret123',
   })
-  @Type(() => EncryptedData)
+  @IsString()
   @IsNotEmpty()
-  consumerKey: EncryptedData;
+  consumerKey: string;
 
   @ApiProperty({
-    description: 'WooCommerce consumer secret',
-    example: {
-      encryptedData: 'encrypted_data',
-      encryptedSymmetricKey: 'encrypted_symmetric_key',
-    },
+    description:
+      'WooCommerce consumer secret (plain text - will be encrypted server-side)',
+    example: 'cs_secret456',
   })
-  @Type(() => EncryptedData)
+  @IsString()
   @IsNotEmpty()
-  consumerSecret: EncryptedData;
+  consumerSecret: string;
 
   @ApiProperty({
     description: 'WooCommerce store URL',
