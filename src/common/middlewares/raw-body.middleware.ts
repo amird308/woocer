@@ -2,14 +2,14 @@ import { Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import * as express from 'express';
 
-const excludeRoutes = ['/api/auth/organization/create'];
+const excludeRoutes = ['/auth/organization/create'];
 
 @Injectable()
 export class RawBodyMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction) {
     // Check if the route matches the auth pattern
     if (
-      req.baseUrl.startsWith('/api/auth') &&
+      req.baseUrl.startsWith('/auth') &&
       !excludeRoutes.includes(req.baseUrl)
     ) {
       // Skip JSON and URL-encoded body parsing for these routes
