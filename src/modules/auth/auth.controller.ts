@@ -17,6 +17,7 @@ import {
   ApiExcludeEndpoint,
   ApiOperation,
   ApiResponse,
+  ApiTags,
 } from '@nestjs/swagger';
 import {
   generateUniqueSlug,
@@ -30,7 +31,9 @@ import {
   GetUserOrganizationsResponseDto,
 } from './models/user-secret.response';
 import { UserSecretService } from './user-secret.service';
-@Controller()
+
+@ApiTags('Auth')
+@Controller('auth')
 export class AuthController {
   constructor(private readonly userSecretService: UserSecretService) {}
 
