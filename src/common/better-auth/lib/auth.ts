@@ -1,6 +1,6 @@
 import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
-import { organization, openAPI, emailOTP } from 'better-auth/plugins';
+import { organization, openAPI, emailOTP, bearer } from 'better-auth/plugins';
 import { PrismaClient } from '@prisma/client';
 import { ac, employee, owner } from './permissions';
 import { EmailService } from '../../services/email.service';
@@ -193,5 +193,6 @@ export const auth = betterAuth({
         },
       },
     }),
+    bearer(),
   ],
 }) as any;
