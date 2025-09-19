@@ -36,7 +36,7 @@ export class AuthController {
 
   @ApiBearerAuth()
   @UseGuards(AuthGuard)
-  @Post('api/auth/organization/create')
+  @Post('organization/create')
   @ApiOperation({
     summary: 'Create a new store/organization (legacy endpoint)',
   })
@@ -76,7 +76,7 @@ export class AuthController {
 
   @ApiBearerAuth()
   @UseGuards(AuthGuard)
-  @Post('api/auth/user-secrets/generate')
+  @Post('organization/user-secrets/generate')
   @ApiOperation({
     summary:
       'Generate or regenerate user-specific encrypted secrets for all organizations',
@@ -96,7 +96,7 @@ export class AuthController {
 
   @ApiBearerAuth()
   @UseGuards(AuthGuard)
-  @Get('api/auth/user-organizations')
+  @Get('organization/user-organizations')
   @ApiOperation({
     summary: 'Get user organizations with user-specific public keys',
     description:
@@ -114,7 +114,7 @@ export class AuthController {
   }
 
   @ApiExcludeEndpoint()
-  @All('api/auth/*')
+  @All('auth/*')
   async handleAuth(@Req() req: Request, @Res() res: Response) {
     // Pass the request to Better Auth
     return toNodeHandler(auth)(req, res);

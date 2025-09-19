@@ -13,6 +13,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 export const auth = betterAuth({
   // TODO: add production domain
   trustedOrigins: ['http://localhost:5173'],
+  basePath: 'auth',
   database: prismaAdapter(prisma, {
     provider: 'postgresql',
   }),
