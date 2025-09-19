@@ -1,7 +1,6 @@
 import {
   All,
   Body,
-  Controller,
   Get,
   Headers,
   Post,
@@ -33,13 +32,12 @@ import {
 import { UserSecretService } from './user-secret.service';
 
 @ApiTags('Auth')
-@Controller('auth')
 export class AuthController {
   constructor(private readonly userSecretService: UserSecretService) {}
 
   @ApiBearerAuth()
   @UseGuards(AuthGuard)
-  @Post('organization/create')
+  @Post('auth/organization/create')
   @ApiOperation({
     summary: 'Create a new store/organization (legacy endpoint)',
   })
@@ -79,7 +77,7 @@ export class AuthController {
 
   @ApiBearerAuth()
   @UseGuards(AuthGuard)
-  @Post('organization/user-secrets/generate')
+  @Post('auth/organization/user-secrets/generate')
   @ApiOperation({
     summary:
       'Generate or regenerate user-specific encrypted secrets for all organizations',
@@ -99,7 +97,7 @@ export class AuthController {
 
   @ApiBearerAuth()
   @UseGuards(AuthGuard)
-  @Get('organization/user-organizations')
+  @Get('auth/organization/user-organizations')
   @ApiOperation({
     summary: 'Get user organizations with user-specific public keys',
     description:
